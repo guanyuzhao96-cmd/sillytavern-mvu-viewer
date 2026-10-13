@@ -1,0 +1,22 @@
+const {chromium}=require('playwright');const path=require('node:path');const assert=require('node:assert/strict');
+(async()=>{
+ const browser=await chromium.launch({headless:true,args:['--no-sandbox']});const page=await browser.newPage({viewport:{width:390,height:844}});const errs=[];page.on('pageerror',e=>errs.push(e.message));
+ await page.goto('file://'+path.resolve(__dirname,'MVU数据查看器_交互预览_v1.0.html'));
+ await page.getByText('读取成功',{exact:false}).waitFor();
+ const host=page.locator('body > div').first();
+ assert.equal(await host.locator('.panel').evaluate(e=>e.getBoundingClientRect().width),390);
+ assert.equal(await host.locator('main').evaluate(e=>e.scrollWidth<=e.clientWidth),true);
+ await page.getByRole('button',{name:'系统与技能',exact:true}).click();
+ const row=host.locator('.row').filter({has:page.getByText('系统点',{exact:true})});await row.getByRole('button',{name:'编辑',exact:true}).click();
+ await host.locator('.dialog textarea').fill('120');await page.getByRole('button',{name:'加入修改',exact:true}).click();await page.getByRole('button',{name:'保存修改',exact:true}).click();await page.getByRole('button',{name:'确认保存',exact:true}).click();
+ await page.getByText('保存成功，已重新读取核对。',{exact:false}).waitFor();assert.equal(await row.locator('.value').textContent(),'120');
+ await page.getByRole('button',{name:'撤销上次保存',exact:true}).click();await page.getByText('已撤销并重新读取核对',{exact:true}).waitFor();assert.equal(await row.locator('.value').textContent(),'70');
+ await page.getByRole('button',{name:'导出',exact:true}).click();
+ await page.getByRole('button',{name:'导入',exact:true}).click();await host.locator('.dialog textarea').fill('{"system":{"points":150}}');await page.getByRole('button',{name:'预览差异',exact:true}).click();await page.getByRole('button',{name:'确认保存',exact:true}).click();await page.getByText('保存成功，已重新读取核对。',{exact:false}).waitFor();assert.equal(await row.locator('.value').textContent(),'150');
+ await host.locator('header select').selectOption('0');await page.getByText('只读（历史楼或更新中）',{exact:false}).waitFor();assert.equal(await page.getByRole('button',{name:'导入',exact:true}).isDisabled(),true);assert.equal(await row.getByRole('button',{name:'编辑',exact:true}).isDisabled(),true);
+ await page.getByRole('button',{name:'最新楼',exact:true}).click();await host.locator('input[aria-label="搜索数据"]').fill('未识别字段');await page.getByText('也会完整显示',{exact:true}).waitFor();
+ await host.locator('input[aria-label="搜索数据"]').fill('');await page.waitForTimeout(200);await page.getByRole('button',{name:'本轮变化',exact:true}).click();await page.getByText('与 #0 AI 楼实际数据比较；包含当前草稿',{exact:true}).waitFor();
+ await page.screenshot({path:path.resolve(__dirname,'mobile-qa.png')});
+ await page.setViewportSize({width:1280,height:900});assert((await host.locator('.panel').boundingBox()).width<=940);await page.screenshot({path:path.resolve(__dirname,'desktop-qa.png')});
+ assert.deepEqual(errs,[]);console.log('PASS：移动/桌面布局、编辑保存、撤销、导出、导入、历史只读、未知字段搜索、本轮对比；无浏览器脚本错误');await browser.close();
+})().catch(e=>{console.error(e);process.exitCode=1;});
