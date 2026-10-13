@@ -17,7 +17,7 @@
       @media(max-width:600px){.backdrop{padding:0}.panel{width:100%;height:100dvh;height:100svh;border:0;border-radius:0}header{padding:12px 12px 8px}.heading h1{font-size:17px}main{padding:10px}.tabs{padding:7px 8px}.status{padding:8px 12px}.toolbar select{max-width:none;flex:1}.toolbar input{flex-basis:100%}.row{padding:8px 9px;gap:7px;grid-template-columns:minmax(86px,31%) minmax(0,1fr) auto}.views{padding:7px 10px}footer{padding:9px 10px;padding-bottom:max(9px,env(safe-area-inset-bottom))}.editmask{padding:10px}.diffval{grid-template-columns:1fr}.dialog{padding:14px}.identity{margin:5px 0}.heading .badge{font-size:11px}}
     `;shadow.append(css);
     const backdrop=el('div',undefined,'backdrop'),panel=el('section',undefined,'panel');panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','MVU 数据查看器');backdrop.append(panel);shadow.append(backdrop);
-    const header=el('header'),heading=el('div',undefined,'heading');heading.append(el('h1','MVU 数据查看器'),el('span',options.demo?'演示数据 · v1.0':'v1.0','badge'),button('关闭',close));header.append(heading);
+    const header=el('header'),heading=el('div',undefined,'heading');heading.append(el('h1','MVU 数据查看器'),el('span',options.demo?'演示数据 · v1.0':'v'+(options.version||'1.0'),'badge'),button('关闭',close));header.append(heading);
     const identity=el('div','尚未读取','identity');header.append(identity);
     const toolbar=el('div',undefined,'toolbar'),floor=el('select');floor.setAttribute('aria-label','选择楼层');floor.onchange=()=>load(Number(floor.value)).catch(error);
     const search=el('input');search.placeholder='搜索角色、字段或内容';search.setAttribute('aria-label','搜索数据');let searchTimer;

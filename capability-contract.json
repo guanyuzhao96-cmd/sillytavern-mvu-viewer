@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "minimum": {"sillytavern": null, "tavernHelper": null},
+  "requirements": [
+    {"id":"host-context","owner":"sillytavern","symbol":"SillyTavern.getContext","required":true,"fallback":null},
+    {"id":"host-events","owner":"sillytavern","symbol":"SillyTavern.getContext().eventSource","required":true,"fallback":null},
+    {"id":"message-read","owner":"tavern-helper","symbol":"TavernHelper.getChatMessages","required":true,"fallback":null},
+    {"id":"message-write","owner":"tavern-helper","symbol":"TavernHelper.updateVariablesWith","required":true,"fallback":null},
+    {"id":"mvu-read","owner":"provider","symbol":"Mvu.getMvuData","required":true,"fallback":null}
+  ]
+}

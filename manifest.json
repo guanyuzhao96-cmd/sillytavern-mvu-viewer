@@ -1,0 +1,15 @@
+{
+  "display_name": "MVU 数据查看器",
+  "loading_order": 100,
+  "js": "index.js",
+  "author": "guanyuzhao96-cmd",
+  "version": "1.1.0",
+  "homePage": "https://github.com/guanyuzhao96-cmd/sillytavern-mvu-viewer",
+  "auto_update": false,
+  "hooks": {
+    "disable": "disable",
+    "clean": "clean",
+    "delete": "clean",
+    "enable": "enable"
+  }
+}
