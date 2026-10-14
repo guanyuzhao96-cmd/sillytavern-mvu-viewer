@@ -10,6 +10,7 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
  for(const name of ['core.js','ui.js'])w.eval(fs.readFileSync(path.join(__dirname,name),'utf8'));
  let adapter;const mount=w.MvuViewerUI.mount;w.MvuViewerUI.mount=(h,C,a,o)=>{adapter=a;return mount(h,C,a,o);};w.eval(fs.readFileSync(path.join(__dirname,'host.js'),'utf8'));
  assert.equal(w.document.querySelectorAll('button').length,1);assert.equal(typeof w.getChatMessages,'undefined');
+ await w.__tw_mvu_viewer_v1__.open();
  const s=new w.MvuViewerCore.Session(adapter);await s.load(0);await s.change(['system','points'],20);await s.save();assert.equal(data.stat_data.system.points,20);assert.equal(data.other.keep,true);
  events.get('start')();await assert.rejects(()=>s.change(['system','points'],21),/生成/);events.get('end')();
  w.__tw_mvu_viewer_v1__.dispose();assert.equal(events.size,0);assert.equal(w.document.querySelectorAll('button').length,0);

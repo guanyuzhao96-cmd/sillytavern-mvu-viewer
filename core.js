@@ -82,5 +82,6 @@
     return found;
   }
   const api={own,object,clone,validate,equal,stable,pointer,parsePath,lookup,edit,diff,merge,readImport,exportData,Session,label,modules,sections};
-  if(typeof module==='object'&&module.exports)module.exports=api;else root.MvuViewerCore=api;
+  root.MvuViewerCore=api;
+  if(typeof window==='undefined'&&typeof module==='object'&&module.exports)module.exports=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

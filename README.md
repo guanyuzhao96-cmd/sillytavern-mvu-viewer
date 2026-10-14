@@ -1,4 +1,6 @@
-# MVU 数据查看器 · 原生扩展 v1.1.0
+# MVU 数据查看器 · 原生扩展 v1.1.1
+
+v1.1.1 修复：浏览器 module.exports 兼容、页面主体未就绪时延迟启动；先创建入口，点击后才初始化面板；面板启动失败显示错误。缺少必要宿主事件时保留查看入口但禁止保存，宿主接口就绪后重试绑定。不修改聊天数据。请在扩展管理中更新后完整刷新页面。
 
 ## 安装
 现在支持通过仓库链接安装。在酒馆“扩展程序 → 安装扩展程序”中粘贴：
@@ -47,3 +49,5 @@ https://github.com/guanyuzhao96-cmd/sillytavern-mvu-viewer
 运行 `python3 build.py` 重建导入 JSON 与演示 HTML。纯数据测试运行 `node test.cjs`；DOM/宿主模拟测试需要安装 jsdom，可用 `npm install --no-save jsdom` 后运行 `node dom-test.cjs` 和 `node host-test.cjs`。真实浏览器测试另需 playwright 与 Chromium，运行 `node ui-test.cjs`。浏览器测试尚未在发布环境执行。
 
 原生适配测试：`node native-test.cjs`（需要 jsdom）。
+
+启动回归测试：`node startup-test.cjs`（需要 jsdom）。

@@ -14,6 +14,13 @@
   H.messages=(...args)=>{const fn=helperMessage||target.TavernHelper?.getChatMessages;if(typeof fn!=='function')throw Error('酒馆助手未就绪，请启用后刷新');return fn(...args);};
   H.update=(...args)=>{const fn=helperUpdate||target.TavernHelper?.updateVariablesWith;if(typeof fn!=='function')throw Error('酒馆助手更新接口不可用');return fn(...args);};
   const KEY='__tw_mvu_viewer_v1__';target[KEY]?.dispose?.();
+  if(!target.document.body){
+    let stopped=false;
+    const resume=()=>{if(!stopped&&target.document.body){pending.dispose();globalThis.MvuViewerHostStart();}};
+    const observer=new target.MutationObserver(resume);
+    const pending={dispose(){if(stopped)return;stopped=true;observer.disconnect();target.document.removeEventListener('DOMContentLoaded',resume);window.removeEventListener('pagehide',pending.dispose);if(target[KEY]===pending)delete target[KEY];}};
+    target[KEY]=pending;observer.observe(target.document,{childList:true,subtree:true});target.document.addEventListener('DOMContentLoaded',resume);window.addEventListener('pagehide',pending.dispose);return;
+  }
   let generating=false,updating=false,disposed=false,mvuBound=null;
   const disposers=[],listeners=new Set();
   function signal(){for(const f of listeners)Promise.resolve(f()).catch(()=>{});}
@@ -26,7 +33,7 @@
     return {chat_id:String(chatId),character_id:String(ctx.characterId??''),group_id:String(ctx.groupId??''),message_id:message.message_id,swipe_id:message.swipe_id??0,message_text:(message.swipes||[])[message.swipe_id??0]||''};
   }
   const adapter={
-    busy:()=>generating||updating,
+    busy:()=>generating||updating||!eventsBound,
     latest:()=>token(-1),
     list:()=>{requireHelper();return H.messages('0-{{lastMessageId}}').map(({message_id,role,name})=>({message_id,role,name}));},
     read:async id=>{const t=token(id);const table=C.clone(mvu().getMvuData({type:'message',message_id:t.message_id}));return {token:t,table};},
@@ -41,19 +48,36 @@
     },
     subscribe:f=>{listeners.add(f);return()=>listeners.delete(f);}
   };
-  const host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;target.document.body.append(host);
-  if(native){try{const ctx=context();H.tv=ctx.eventTypes||ctx.event_types||{};}catch(_){} }
-  const app=globalThis.MvuViewerUI.mount(host,C,adapter,{version:native?'1.1.0':'1.0'});
+  let host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;target.document.body.append(host);
+  let app=null,errorPanel=null;
   const launch=target.document.createElement('button');launch.type='button';launch.textContent='MVU 数据';launch.setAttribute('aria-label','打开 MVU 数据查看器');
   Object.assign(launch.style,{position:'fixed',right:'12px',bottom:'calc(80px + env(safe-area-inset-bottom))',zIndex:'2147482000',border:'1px solid #cbd9e5',borderRadius:'8px',padding:'9px 12px',fontSize:'13px',background:'#f4f8fc',color:'#275f8a',boxShadow:'0 2px 10px #0002'});
-  function open(){app.open().catch(e=>{host.hidden=false;const s=app.shadow.querySelector('.status');s.textContent=e.message;s.className='status error';});}
+  function showError(e){
+    launch.textContent='MVU 数据 · !';launch.title=e.message||String(e);
+    if(app){host.hidden=false;const s=app.shadow.querySelector('.status');s.textContent=e.message||String(e);s.className='status error';return;}
+    errorPanel?.remove();errorPanel=target.document.createElement('div');errorPanel.setAttribute('role','alert');
+    Object.assign(errorPanel.style,{position:'fixed',inset:'20% 12px auto',zIndex:'2147483001',padding:'18px',border:'1px solid #cbb',borderRadius:'10px',background:'#fff',color:'#8b2424',whiteSpace:'pre-wrap',overflowWrap:'anywhere',fontSize:'14px'});
+    const text=target.document.createElement('p');text.textContent='MVU 查看器启动失败：'+(e.message||String(e));const close=target.document.createElement('button');close.textContent='关闭';close.onclick=()=>{errorPanel?.remove();errorPanel=null;};errorPanel.append(text,close);target.document.body.append(errorPanel);
+  }
+  async function open(){if(disposed)return;try{
+    errorPanel?.remove();errorPanel=null;
+    if(!app){if(!C||!globalThis.MvuViewerUI?.mount)throw Error('核心或界面模块未加载，请更新扩展后完整刷新');
+      try{app=globalThis.MvuViewerUI.mount(host,C,adapter,{version:'1.1.1'});}catch(e){host.remove();host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;target.document.body.append(host);throw e;}}
+    await app.open();launch.textContent='MVU 数据';
+  }catch(e){showError(e);}}
   launch.onclick=open;target.document.body.append(launch);
-  if(H.append&&H.button&&H.event){H.append([{name:'MVU 数据',visible:true}]);listen(H.button('MVU 数据'),open);}
-  for(const k of ['CHAT_CHANGED','MESSAGE_SWIPED','MESSAGE_SENT','MESSAGE_RECEIVED','MESSAGE_DELETED','MESSAGE_UPDATED','MESSAGE_EDITED'])listen(H.tv[k],signal);
-  listen(H.tv.GENERATION_STARTED,()=>{generating=true;signal();});listen(H.tv.GENERATION_ENDED,()=>{generating=false;signal();});listen(H.tv.GENERATION_STOPPED,()=>{generating=false;updating=false;signal();});
+  let eventsBound=false;
+  function bindEvents(){if(eventsBound)return;
+    if(native){const ctx=context();H.tv=ctx.eventTypes||ctx.event_types||{};if(!H.tv.GENERATION_STARTED||!H.tv.GENERATION_ENDED)throw Error('宿主缺少生成事件，暂时只能查看，不能保存');}
+    const start=disposers.length;
+    try{if(H.append&&H.button&&H.event){H.append([{name:'MVU 数据',visible:true}]);listen(H.button('MVU 数据'),open);}
+      for(const k of ['CHAT_CHANGED','MESSAGE_SWIPED','MESSAGE_SENT','MESSAGE_RECEIVED','MESSAGE_DELETED','MESSAGE_UPDATED','MESSAGE_EDITED'])listen(H.tv[k],signal);
+      listen(H.tv.GENERATION_STARTED,()=>{generating=true;signal();});listen(H.tv.GENERATION_ENDED,()=>{generating=false;signal();});listen(H.tv.GENERATION_STOPPED,()=>{generating=false;updating=false;signal();});eventsBound=true;
+    }catch(e){for(const f of disposers.splice(start))f();throw e;}}
+  try{bindEvents();}catch(e){launch.textContent='MVU 数据 · !';launch.title=e.message;}
   // 不复制事件字符串；使用实际安装导出的常量。
-  const poll=setInterval(()=>{try{const v=mvu();if(v===mvuBound)return;mvuBound=v;listen(v.events?.VARIABLE_UPDATE_STARTED,()=>{updating=true;signal();});listen(v.events?.VARIABLE_UPDATE_ENDED,()=>{updating=false;setTimeout(signal,120);});}catch(_){}},1000);
-  const api={open,dispose(){if(disposed)return;disposed=true;clearInterval(poll);for(const f of disposers)f();listeners.clear();app.dispose();launch.remove();window.removeEventListener('pagehide',api.dispose);if(target[KEY]===api)delete target[KEY];}};
+  const poll=setInterval(()=>{if(!eventsBound)try{bindEvents();signal();}catch(_){}try{const v=mvu();if(v===mvuBound)return;mvuBound=v;listen(v.events?.VARIABLE_UPDATE_STARTED,()=>{updating=true;signal();});listen(v.events?.VARIABLE_UPDATE_ENDED,()=>{updating=false;setTimeout(signal,120);});}catch(_){}},1000);
+  const api={open,dispose(){if(disposed)return;disposed=true;clearInterval(poll);for(const f of disposers)f();listeners.clear();app?.dispose();if(!app)host.remove();errorPanel?.remove();launch.remove();window.removeEventListener('pagehide',api.dispose);if(target[KEY]===api)delete target[KEY];}};
   target[KEY]=api;window.addEventListener('pagehide',api.dispose);
   };
   globalThis.MvuViewerHostStart();
