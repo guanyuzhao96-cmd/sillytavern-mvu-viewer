@@ -2,7 +2,7 @@
   'use strict';
   function mount(host,C,adapter,options={}){
     const doc=host.ownerDocument,win=doc.defaultView,shadow=host.attachShadow({mode:'open'}),session=new C.Session(adapter);
-    let module='roles',view='overview',query='',previous=null,previousId=null,editor=null,disposed=false,editable=false,loadSeq=0,lastFocus=null;
+    let module='roles',view='overview',query='',previous=null,previousId=null,editor=null,disposed=false,editable=false,readOnlyReason='请先读取数据',loadSeq=0,lastFocus=null;
     const expanded=new Set();
     function el(tag,text,cls){const n=doc.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
     function button(text,fn,cls){const n=el('button',text,cls);n.type='button';n.onclick=()=>Promise.resolve().then(fn).catch(error);return n;}
@@ -61,12 +61,12 @@
       else if(view==='changes'){main.append(el('p',previousId===null?'没有可比较的上一份 AI 楼数据':`与 #${previousId} AI 楼实际数据比较；包含当前草稿`,'identity'));if(previous)diffView(C.diff(previous,session.draft),main);}
       else if(query){const found=matches(session.draft);main.append(el('p',`搜索全部实际数据 · ${found.length} 项`,'identity'));for(const r of found){const box=el('div',undefined,'group');box.append(el('h2',C.pointer(r.path)),valueRow(r.path.at(-1),r.value,r.path));main.append(box);}if(!found.length)main.append(el('p','没有匹配字段','empty'));}
       else{const sections=C.sections(session.draft,module);if(!sections.length)main.append(el('p','此模块没有已保存数据；可到“全部字段”查看其他结构。','empty'));for(const section of sections){const group=el('section',undefined,'group');group.append(el('h2',section.name));const v=section.value;if(v!==null&&typeof v==='object'){if(!Object.keys(v).length)group.append(valueRow('当前值',v,section.path));for(const [k,value]of Object.entries(v))tree(k,value,[...section.path,k],group);}else group.append(valueRow(section.path.at(-1),v,section.path));main.append(group);}if(module==='claimed')main.prepend(el('p','这里展示实际奖励账本；不会自行生成成就或重算奖励。','identity'));}
-      const count=session.changes().length;footer.append(el('span',`${editable?'最新楼 · 可编辑':'历史楼 · 只读'}${count?' · '+count+' 项待保存':''}`,count?'footnote dirty':'footnote'));
+      const count=session.changes().length;footer.append(el('span',`${editable?'最新楼 · 可编辑':'只读 · '+readOnlyReason}${count?' · '+count+' 项待保存':''}`,count?'footnote dirty':'footnote'));
       footer.append(button('导出',exportFile),button('复制 JSON',copy));const imp=button('导入',importDialog);imp.disabled=!editable||session.lock;footer.append(imp);
       const undo=button('撤销上次保存',async()=>{await session.revert();await recalc();render();note('已撤销并重新读取核对');});undo.disabled=!editable||!session.undo||count>0||session.lock;footer.append(undo);
       if(count){const cancel=button('取消修改',()=>{session.draft=C.clone(session.base.table.stat_data);render();note('已取消草稿');});cancel.disabled=session.lock;footer.append(cancel);const save=button('保存修改',reviewSave,'accent');save.disabled=!editable||session.lock;footer.append(save);}main.scrollTop=oldScroll;
     }
-    async function recalc(){editable=false;if(session.base)try{await session.assertEditable();editable=true;}catch(_){} }
+    async function recalc(){editable=false;readOnlyReason='请先读取数据';if(session.base)try{await session.assertEditable();editable=true;readOnlyReason='';}catch(e){readOnlyReason=e.message||String(e);} }
     async function load(id){
       if(session.changes().length){if(!win.confirm('有未保存修改，刷新或切换楼层将丢弃草稿。继续吗？'))return;}
       const seq=++loadSeq;note('正在读取…');editable=false;
@@ -74,7 +74,7 @@
         await session.load(id);if(seq!==loadSeq)return;floor.value=String(id);previous=null;previousId=null;
         for(let i=list.length-1;i>=0;i--){const m=list[i];if(m.message_id>=id||m.role!=='assistant')continue;try{const old=await adapter.read(m.message_id);if(C.object(old.table.stat_data)){previous=C.clone(old.table.stat_data);previousId=m.message_id;break;}}catch(_){}}
         await recalc();identity.textContent=`${session.base.token.chat_id||'当前聊天'} · #${id} · 消息页 ${(session.base.token.swipe_id||0)+1} · ${new TextEncoder().encode(JSON.stringify(session.base.table)).length.toLocaleString()} 字节`;
-        note(`读取成功 · ${new Date().toLocaleTimeString()} · ${editable?'可编辑最新楼层':'只读（历史楼或更新中）'}`);render();
+        note(`读取成功 · ${new Date().toLocaleTimeString()} · ${editable?'可编辑最新楼层':'只读：'+readOnlyReason}`);render();
       }catch(e){if(seq!==loadSeq)return;session.base=null;session.draft=null;previous=null;render();identity.textContent='未读取到数据';error(e);}
     }
     async function exportFile(){if(!session.base)throw Error('请先读取数据');const snapshot=await adapter.read(session.base.token.message_id);if(!C.equal(snapshot.token,session.base.token))throw Error('消息来源变化，请刷新后导出');download(JSON.stringify(C.exportData(snapshot),null,2),`MVU_楼层${snapshot.token.message_id}_${Date.now()}.json`);note('已导出所选楼层的实际保存数据');}
@@ -89,7 +89,7 @@
     function close(){if(session.lock){note('正在保存，请稍后关闭');return;}if(session.changes().length&&!win.confirm('关闭将丢弃未保存草稿，继续吗？'))return;host.hidden=true;endModal();options.onClose?.();}
     function focusTrap(e){if(e.key==='Escape'){e.preventDefault();if(editor)endModal();else close();}if(e.key==='Tab'){const container=editor||panel;const nodes=[...container.querySelectorAll('button,input,select,textarea,a[href],summary')].filter(n=>!n.disabled&&n.getClientRects().length);if(!nodes.length)return;const first=nodes[0],last=nodes.at(-1),active=shadow.activeElement;if(e.shiftKey&&active===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&active===last){e.preventDefault();first.focus();}}}
     shadow.addEventListener('keydown',focusTrap);
-    const stop=adapter.subscribe?.(async()=>{if(disposed)return;await recalc();render();if(session.base&&!editable)note('当前数据来源或更新状态已变化；保存将重新校验，请刷新到最新楼。');});
+    const stop=adapter.subscribe?.(async()=>{if(disposed)return;await recalc();render();if(session.base&&!editable)note('只读：'+readOnlyReason);});
     return {session,shadow,open:async()=>{host.hidden=false;await load();search.focus();},dispose:()=>{disposed=true;stop?.();clearTimeout(searchTimer);for(const t of timers)clearTimeout(t);for(const url of urls)win.URL.revokeObjectURL(url);shadow.removeEventListener('keydown',focusTrap);host.remove();},load};
   }
   root.MvuViewerUI={mount};

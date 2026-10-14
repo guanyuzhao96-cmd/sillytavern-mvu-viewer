@@ -49,7 +49,7 @@
     constructor(adapter){this.a=adapter;this.base=null;this.draft=null;this.undo=null;this.lock=false;this.epoch=0;}
     async load(id){if(this.lock)throw Error('正在保存，请稍后');const epoch=++this.epoch;const s=await this.a.read(id);if(epoch!==this.epoch)throw Error('读取请求已被更新的请求替代');if(!object(s.table)||!object(s.table.stat_data))throw Error('该楼层没有可用的 MVU stat_data');validate(s.table);this.base=clone(s);this.draft=clone(s.table.stat_data);return this.base;}
     changes(){return this.base?diff(this.base.table.stat_data,this.draft):[];}
-    async assertEditable(){if(!this.base)throw Error('请先读取数据');const latest=await this.a.latest();if(!equal(latest,this.base.token))throw Error('聊天、最新楼层或消息页已变化，请刷新；历史楼层不可编辑');if(this.a.busy())throw Error('正在生成或更新变量，请完成后刷新');return latest;}
+    async assertEditable(){if(!this.base)throw Error('请先读取数据');const latest=await this.a.latest();if(!equal(latest,this.base.token))throw Error('聊天、最新楼层或消息页已变化，请刷新；历史楼层不可编辑');if(this.a.busy())throw Error(this.a.busyReason?.()||'正在生成或更新变量，请完成后刷新');return latest;}
     async change(path,value,remove=false){await this.assertEditable();this.draft=edit(this.draft,path,value,remove);}
     async import(text,mode='merge'){await this.assertEditable();const data=readImport(text);this.draft=mode==='replace'?clone(data.stat):merge(this.draft,data.stat);return data;}
     async save(){
