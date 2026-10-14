@@ -1,7 +1,7 @@
 const {JSDOM}=require(process.env.MVU_JSDOM_PATH||'jsdom');
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 (async()=>{
- const dom=new JSDOM('<body></body>',{runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
+ const dom=new JSDOM('<body><div id="extensions_settings2"></div></body>',{runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
  w.TextEncoder=TextEncoder;w.confirm=()=>true;
  const events=new Map(),table={stat_data:{system:{points:7}},other:{keep:true}};let data=structuredClone(table);
  w.SillyTavern={getContext:()=>({chatId:'native',characterId:'card',eventTypes:{GENERATION_STARTED:'start',GENERATION_ENDED:'end'},eventSource:{on:(k,f)=>events.set(k,f),removeListener:k=>events.delete(k)}})};
@@ -9,7 +9,7 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
  w.Mvu={getMvuData:()=>structuredClone(data),events:{}};
  for(const name of ['core.js','ui.js'])w.eval(fs.readFileSync(path.join(__dirname,name),'utf8'));
  let adapter;const mount=w.MvuViewerUI.mount;w.MvuViewerUI.mount=(h,C,a,o)=>{adapter=a;return mount(h,C,a,o);};w.eval(fs.readFileSync(path.join(__dirname,'host.js'),'utf8'));
- assert.equal(w.document.querySelectorAll('button').length,1);assert.equal(typeof w.getChatMessages,'undefined');
+ assert.equal(w.document.querySelectorAll('#mvu-viewer-extension button').length,1);assert.equal(typeof w.getChatMessages,'undefined');
  await w.__tw_mvu_viewer_v1__.open();
  const s=new w.MvuViewerCore.Session(adapter);await s.load(0);await s.change(['system','points'],20);await s.save();assert.equal(data.stat_data.system.points,20);assert.equal(data.other.keep,true);
  events.get('start')();await assert.rejects(()=>s.change(['system','points'],21),/生成/);events.get('end')();

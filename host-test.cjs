@@ -1,7 +1,7 @@
-const {JSDOM}=require(process.env.MVU_JSDOM_PATH||'jsdom');
+const {JSDOM}=require(process.env.MVU_JSDOM_PATH||'/workspace/scratch/ad28b747ba44/test-runtime/node_modules/jsdom');
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 (async()=>{
-const dom=new JSDOM('<body></body>',{runScripts:'outside-only',pretendToBeVisual:true});const w=dom.window;w.TextEncoder=TextEncoder;w.confirm=()=>true;
+const dom=new JSDOM('<body><div id="extensions_settings2"></div></body>',{runScripts:'outside-only',pretendToBeVisual:true});const w=dom.window;w.TextEncoder=TextEncoder;w.confirm=()=>true;
 let chat='a',swipe=0,latest=2,updates=0;const tables={0:{stat_data:{system:{points:1}}},2:{stat_data:{system:{points:70}},initialized_lorebooks:{book:[]},external:{keep:1}}};const events=new Map();
 w.SillyTavern={getContext:()=>({chatId:chat,characterId:'card',groupId:''})};w.Mvu={getMvuData:({message_id})=>structuredClone(tables[message_id]),events:{VARIABLE_UPDATE_STARTED:'start',VARIABLE_UPDATE_ENDED:'end'}};
 w.tavern_events={CHAT_CHANGED:'chat',GENERATION_STARTED:'gen-start',GENERATION_ENDED:'gen-end'};
