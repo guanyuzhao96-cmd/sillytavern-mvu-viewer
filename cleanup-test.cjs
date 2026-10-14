@@ -1,0 +1,24 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const {cleanText,plan}=require('./cleanup.js');
+const rules=[{mode:'block',start:'<dream_body>',end:'</dream_body>'}];
+assert.equal(cleanText('总结<dream_body>正文\n文字</dream_body>尾部',rules).text,'总结尾部');
+assert.equal(cleanText('A<dream_body>x<dream_body>y</dream_body>z</dream_body>B',rules).text,'AB');
+assert.equal(cleanText('A<dream_body>未闭合',rules).text,'A<dream_body>未闭合');
+assert.equal(cleanText('xxx',[{mode:'text',start:'x'}]).text,'');
+assert.throws(()=>cleanText('x',[{start:'',end:'x'}]));
+const make=id=>({message_id:id,name:'AI',role:'assistant',swipe_id:0,swipes:['摘要<dream_body>正文</dream_body>','摘要<dream_body>另一页</dream_body>'],swipes_data:[{stat_data:{hp:id}},{stat_data:{hp:id+1}}],swipes_info:[{keep:1},{keep:2}]});
+const messages=Array.from({length:8},(_,i)=>make(i));
+const p=plan(messages,{keep:6,aiOnly:true,rules});assert.equal(p.changes.length,2);assert.equal(p.count,4);assert(p.bytes>0);assert.equal(messages[0].swipes[0],'摘要<dream_body>正文</dream_body>');
+assert.throws(()=>plan(messages,{keep:0,rules}));
+(async()=>{
+ const {JSDOM}=require(process.env.MVU_JSDOM_PATH||'jsdom');const dom=new JSDOM('<body><div id="extensions_settings2"></div></body>',{runScripts:'outside-only'}),w=dom.window;w.TextEncoder=TextEncoder;w.confirm=()=>true;
+ const events=new Map(),settings={};let data=structuredClone(messages),writes=0;
+ w.SillyTavern={getContext:()=>({chatId:'test',characterId:0,extensionSettings:settings,saveSettingsDebounced(){},eventTypes:{GENERATION_STARTED:'start',GENERATION_ENDED:'end'},eventSource:{on:(n,f)=>events.set(n,f),removeListener:n=>events.delete(n)}})};
+ w.TavernHelper={getChatMessages:id=>structuredClone(typeof id==='string'?data:[data[id===-1?data.length-1:id]]),setChatMessages:async patches=>{writes++;for(const patch of patches)Object.assign(data[patch.message_id],structuredClone(patch));}};
+ let adapter;for(const f of ['core.js','ui.js','cleanup.js'])w.eval(fs.readFileSync(path.join(__dirname,f),'utf8'));const mount=w.MvuViewerCleanup.mount;w.MvuViewerCleanup.mount=(h,a)=>{adapter=a;return mount(h,a);};w.eval(fs.readFileSync(path.join(__dirname,'host.js'),'utf8'));
+ w.__tw_mvu_viewer_v1__.openCleanup();const shadow=w.document.querySelector('#mvu-viewer-cleanup').shadowRoot;assert(shadow.textContent.includes('一键删除'));w.confirm=()=>false;[...shadow.querySelectorAll('button')].find(b=>b.textContent==='一键删除').click();await new Promise(r=>setTimeout(r,10));assert.equal(writes,0);w.confirm=()=>true;[...shadow.querySelectorAll('button')].find(b=>b.textContent==='一键删除').click();await new Promise(r=>setTimeout(r,10));assert.match(shadow.textContent,/清理完成/);assert.equal(writes,1);assert.equal(data[0].swipes[0],'摘要');assert.deepEqual(data[0].swipes_data,messages[0].swipes_data);assert.deepEqual(data[0].swipes_info,messages[0].swipes_info);assert.deepEqual(data.slice(2),messages.slice(2));
+ const stale=await adapter.snapshot();data[0].swipes[0]='外部修改';await assert.rejects(()=>adapter.commit(stale,p.changes),/变化/);assert.equal(writes,1);
+ events.get('start')();await assert.rejects(()=>adapter.snapshot(),/生成/);events.get('end')();
+ const buttons=[...shadow.querySelectorAll('button')];buttons.find(b=>b.textContent==='添加规则').click();await new Promise(r=>setTimeout(r,10));assert.equal(settings.mvu_viewer_cleanup.rules.length,2);[...shadow.querySelectorAll('button')].filter(b=>b.textContent==='删除规则')[1].click();await new Promise(r=>setTimeout(r,10));assert.equal(settings.mvu_viewer_cleanup.rules.length,1);
+ w.__tw_mvu_viewer_v1__.dispose();assert.equal(w.document.querySelector('#mvu-viewer-cleanup'),null);assert.equal(events.size,0);w.close();console.log('PASS：清理匹配、嵌套/缺失闭合保护、全部 swipe、保留楼层、元数据保留、冲突/生成拒写、规则增删和清理生命周期。');
+})().catch(e=>{console.error(e);process.exitCode=1;});

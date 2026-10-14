@@ -49,7 +49,22 @@
     subscribe:f=>{listeners.add(f);return()=>listeners.delete(f);}
   };
   let drawer=null,host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;
-  let app=null,errorPanel=null;
+  let app=null,errorPanel=null,cleanupApp=null;
+  const cleanupAdapter={
+    settings:()=>context().extensionSettings?.mvu_viewer_cleanup||{},
+    saveSettings:value=>{const ctx=context();if(!ctx.extensionSettings||typeof ctx.saveSettingsDebounced!=='function')throw Error('宿主设置保存接口未就绪');ctx.extensionSettings.mvu_viewer_cleanup=value;ctx.saveSettingsDebounced();},
+    snapshot:async()=>{if(adapter.busy())throw Error('正在生成或更新，请稍后清理');return {format:'mvu-viewer-chat-cleanup-backup-v1',token:C.clone(token(-1)),messages:C.clone(H.messages('0-{{lastMessageId}}',{include_swipes:true}))};},
+    commit:async(base,changes)=>{
+      const setter=typeof setChatMessages==='function'?setChatMessages:target.TavernHelper?.setChatMessages;if(typeof setter!=='function')throw Error('酒馆助手消息修改接口未就绪');
+      if(adapter.busy()||!C.equal(token(-1),base.token)||!C.equal(H.messages('0-{{lastMessageId}}',{include_swipes:true}),base.messages))throw Error('聊天或消息已变化，请重新点击一键删除');
+      const patches=changes.map(change=>{const original=base.messages.find(m=>m.message_id===change.message_id);if(!original||change.message_id>=base.token.message_id)throw Error('清理范围包含最新楼，已拒绝');return {message_id:change.message_id,swipe_id:original.swipe_id,swipes:C.clone(change.swipes),swipes_data:C.clone(original.swipes_data),swipes_info:C.clone(original.swipes_info)};});
+      updating=true;signal();try{await setter(patches,{refresh:'all'});
+        if(!C.equal(token(-1),base.token))throw Error('写入期间聊天变化，部分内容可能已删除，请检查备份');
+        for(const patch of patches){const actual=H.messages(patch.message_id,{include_swipes:true})[0];if(!actual||!C.equal(actual.swipes,patch.swipes)||!C.equal(actual.swipes_data,patch.swipes_data)||actual.swipe_id!==patch.swipe_id)throw Error('清理后核对失败，部分内容可能已删除，请检查备份');}
+      }finally{updating=false;signal();}
+    }
+  };
+  function openCleanup(){try{if(!cleanupApp){if(!globalThis.MvuViewerCleanup?.mount)throw Error('聊天瘦身模块未加载，请更新并刷新');const page=target.document.createElement('div');page.id='mvu-viewer-cleanup';page.hidden=true;target.document.body.append(page);try{cleanupApp=globalThis.MvuViewerCleanup.mount(page,cleanupAdapter);}catch(e){page.remove();throw e;}}cleanupApp.open();}catch(e){showError(e);}}
   function ensureDrawer(){
     if(disposed||drawer?.isConnected)return;
     const container=target.document.querySelector('#extensions_settings2, #extensions_settings');if(!container)return;
@@ -60,7 +75,8 @@
     const icon=target.document.createElement('div');icon.className='inline-drawer-icon fa-solid fa-circle-chevron-down down';heading.append(title,icon);
     const content=target.document.createElement('div');content.className='inline-drawer-content';
     const launch=target.document.createElement('button');launch.type='button';launch.className='menu_button';launch.textContent='读取 / 刷新当前 MVU 数据';launch.setAttribute('aria-label','读取或刷新当前 MVU 数据');
-    launch.onclick=open;content.append(launch,host);inline.append(heading,content);drawer.append(inline);container.append(drawer);
+    const cleanup=target.document.createElement('button');cleanup.type='button';cleanup.className='menu_button';cleanup.textContent='聊天瘦身';cleanup.onclick=openCleanup;
+    launch.onclick=open;content.append(launch,cleanup,host);inline.append(heading,content);drawer.append(inline);container.append(drawer);
   }
   function showError(e){
     const launch=drawer?.querySelector('button');if(launch){launch.textContent='MVU 数据查看器 · 启动失败';launch.title=e.message||String(e);}
@@ -72,7 +88,7 @@
   async function open(){if(disposed)return;try{
       ensureDrawer();if(!drawer)throw Error('扩展设置列表尚未就绪，请稍后重试');errorPanel?.remove();errorPanel=null;host.hidden=false;
     if(!app){if(!C||!globalThis.MvuViewerUI?.mount)throw Error('核心或界面模块未加载，请更新扩展后完整刷新');
-      try{app=globalThis.MvuViewerUI.mount(host,C,adapter,{version:'1.2.0',inline:true});}catch(e){host.remove();host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;drawer?.querySelector('.inline-drawer-content')?.append(host);throw e;}}
+      try{app=globalThis.MvuViewerUI.mount(host,C,adapter,{version:'1.3.0',inline:true});}catch(e){host.remove();host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;drawer?.querySelector('.inline-drawer-content')?.append(host);throw e;}}
     await app.open();const launch=drawer?.querySelector('button');if(launch)launch.textContent='刷新当前 MVU 数据';
   }catch(e){showError(e);}}
   ensureDrawer();
@@ -87,7 +103,7 @@
   try{bindEvents();}catch(_){}
   // 不复制事件字符串；使用实际安装导出的常量。
   const poll=setInterval(()=>{ensureDrawer();if(!eventsBound)try{bindEvents();signal();}catch(_){}try{const v=mvu();if(v===mvuBound)return;mvuBound=v;listen(v.events?.VARIABLE_UPDATE_STARTED,()=>{updating=true;signal();});listen(v.events?.VARIABLE_UPDATE_ENDED,()=>{updating=false;setTimeout(signal,120);});}catch(_){}},1000);
-  const api={open,dispose(){if(disposed)return;disposed=true;clearInterval(poll);for(const f of disposers)f();listeners.clear();app?.dispose();if(!app)host.remove();errorPanel?.remove();drawer?.remove();window.removeEventListener('pagehide',api.dispose);if(target[KEY]===api)delete target[KEY];}};
+  const api={open,openCleanup,dispose(){if(disposed)return;disposed=true;clearInterval(poll);for(const f of disposers)f();listeners.clear();app?.dispose();cleanupApp?.dispose();if(!app)host.remove();errorPanel?.remove();drawer?.remove();window.removeEventListener('pagehide',api.dispose);if(target[KEY]===api)delete target[KEY];}};
   target[KEY]=api;window.addEventListener('pagehide',api.dispose);
   };
   globalThis.MvuViewerHostStart();
