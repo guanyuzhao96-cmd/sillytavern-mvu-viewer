@@ -22,7 +22,7 @@
     const toolbar=el('div',undefined,'toolbar'),floor=el('select');floor.setAttribute('aria-label','选择楼层');floor.onchange=()=>load(Number(floor.value)).catch(error);
     const search=el('input');search.placeholder='搜索角色、字段或内容';search.setAttribute('aria-label','搜索数据');let searchTimer;
     search.oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{query=search.value.toLowerCase();render();},160);};
-    toolbar.append(floor,button('最新楼',()=>load()),button('刷新',()=>load(session.base?.token.message_id)));if(options.onCleanup)toolbar.append(button('聊天瘦身',options.onCleanup));toolbar.append(search);header.append(toolbar);panel.append(header);
+    toolbar.append(floor,button('最新楼',()=>load()),button('刷新',()=>load(session.base?.token.message_id)));if(options.onCleanup)toolbar.append(button('聊天瘦身',options.onCleanup));if(options.onGallery)toolbar.append(button('角色图鉴',options.onGallery));toolbar.append(search);header.append(toolbar);panel.append(header);
     const tabs=el('nav',undefined,'tabs');tabs.setAttribute('aria-label','数据模块');panel.append(tabs);
     const status=el('div','正在读取…','status');status.setAttribute('role','status');status.setAttribute('aria-live','polite');panel.append(status);
     const views=el('div',undefined,'views');panel.append(views);

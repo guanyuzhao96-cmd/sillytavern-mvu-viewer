@@ -9,11 +9,11 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
  w.Mvu={getMvuData:()=>structuredClone(data),events:{}};
  for(const name of ['core.js','ui.js'])w.eval(fs.readFileSync(path.join(__dirname,name),'utf8'));
  let adapter;const mount=w.MvuViewerUI.mount;w.MvuViewerUI.mount=(h,C,a,o)=>{adapter=a;return mount(h,C,a,o);};w.eval(fs.readFileSync(path.join(__dirname,'host.js'),'utf8'));
- assert.equal(w.document.querySelectorAll('#mvu-viewer-extension button').length,2);assert.equal(typeof w.getChatMessages,'undefined');
+ assert.equal(w.document.querySelectorAll('#mvu-viewer-extension button').length,3);assert.equal(typeof w.getChatMessages,'undefined');
  await w.__tw_mvu_viewer_v1__.open();
  const s=new w.MvuViewerCore.Session(adapter);await s.load(0);await s.change(['system','points'],20);await s.save();assert.equal(data.stat_data.system.points,20);assert.equal(data.other.keep,true);
  events.get('start')();await assert.rejects(()=>s.change(['system','points'],21),/生成/);events.get('end')();
  w.__tw_mvu_viewer_v1__.dispose();assert.equal(events.size,0);assert.equal(w.document.querySelectorAll('button').length,0);
- w.MvuViewerHostStart();assert.equal(w.document.querySelectorAll('button').length,2);w.__tw_mvu_viewer_v1__.dispose();w.close();
+ w.MvuViewerHostStart();assert.equal(w.document.querySelectorAll('button').length,3);w.__tw_mvu_viewer_v1__.dispose();w.close();
  console.log('PASS：原生扩展上下文（无 iframe 全局函数）启动、TavernHelper 读取/保存、生成拒写、清理和重启；并非真实酒馆安装验收。');
 })().catch(e=>{console.error(e);process.exitCode=1;});
