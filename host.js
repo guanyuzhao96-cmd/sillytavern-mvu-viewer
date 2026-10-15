@@ -28,17 +28,25 @@
   function mvu(){const v=(typeof Mvu!=='undefined'?Mvu:null)||target.Mvu;if(!v||typeof v.getMvuData!=='function')throw Error('MVU 未就绪，请确认变量框架已启用，再点击刷新');return v;}
   function context(){const st=target.SillyTavern||window.SillyTavern;if(!st||typeof st.getContext!=='function')throw Error('未提供 SillyTavern 聊天身份接口，禁止写入');return st.getContext();}
   function requireHelper(){if(!H.messages)throw Error('酒馆助手消息读取接口不可用');}
+  function generationState(){
+    const ctx=context();
+    if(ctx.streamingProcessor&&!ctx.streamingProcessor.isFinished)return {known:true,active:true};
+    const stop=target.document.getElementById('mes_stop');
+    if(stop){let visible=!stop.hidden;for(let n=stop;n&&visible;n=n.parentElement){const style=target.getComputedStyle(n);visible=style.display!=='none'&&style.visibility!=='hidden'&&style.visibility!=='collapse';}return {known:true,active:visible};}
+    return {known:eventsBound,active:generating};
+  }
   function token(id){requireHelper();const message=H.messages(id,{include_swipes:true})[0];if(!message)throw Error('消息楼层不存在');const ctx=context();
     const chatId=ctx.chatId;if(chatId===undefined||chatId===null||chatId==='')throw Error('当前没有可识别的聊天');
     return {chat_id:String(chatId),character_id:String(ctx.characterId??''),group_id:String(ctx.groupId??''),message_id:message.message_id,swipe_id:message.swipe_id??0,message_text:(message.swipes||[])[message.swipe_id??0]||''};
   }
   const adapter={
-    busy:()=>generating||updating||!eventsBound,
-    busyReason:()=>!eventsBound?'宿主生成事件未连接，暂时只读；请确认酒馆及酒馆助手已正常加载':generating?'AI 正在生成，结束后可编辑':updating?'MVU 正在更新变量，完成后可编辑':'',
+    busy:()=>generating||updating||generationState().active,
+    busyReason:()=>updating?'MVU 正在更新变量，完成后可编辑':generating||generationState().active?'AI 正在生成，结束后可编辑':'',
     latest:()=>token(-1),
     list:()=>{requireHelper();return H.messages('0-{{lastMessageId}}').map(({message_id,role,name})=>({message_id,role,name}));},
     read:async id=>{const t=token(id);const table=C.clone(mvu().getMvuData({type:'message',message_id:t.message_id}));return {token:t,table};},
     commit:async(base,stat)=>{
+      if(!generationState().known)throw Error('无法确认生成状态；草稿已保留，尚未写入。请先打开酒馆聊天界面再保存');
       if(!H.update)throw Error('酒馆助手更新接口不可用');if(adapter.busy())throw Error('正在生成或更新，禁止保存');
       if(!C.equal(token(-1),base.token))throw Error('最新楼层或消息页已变化，请刷新');
       // 固定 helper 快照中的同步 updater 在同一 JS 任务内检查并写入。
@@ -67,6 +75,7 @@
     saveSettings:value=>{const ctx=context();if(ctx.extensionSettings&&typeof ctx.saveSettingsDebounced==='function'){ctx.extensionSettings.mvu_viewer_cleanup=value;ctx.saveSettingsDebounced();}else{target.localStorage.setItem('mvu-viewer-cleanup-rules',JSON.stringify(value));}},
     snapshot:async()=>{if(adapter.busy())throw Error('正在生成或更新，请稍后清理');return {format:'mvu-viewer-chat-cleanup-backup-v1',token:C.clone(token(-1)),messages:C.clone(H.messages('0-{{lastMessageId}}',{include_swipes:true}))};},
     commit:async(base,changes)=>{
+      if(!generationState().known)throw Error('无法确认生成状态，未执行删除；请先打开酒馆聊天界面');
       const setter=typeof setChatMessages==='function'?setChatMessages:target.TavernHelper?.setChatMessages;if(typeof setter!=='function')throw Error('酒馆助手消息修改接口未就绪');
       if(adapter.busy()||!C.equal(token(-1),base.token)||!C.equal(H.messages('0-{{lastMessageId}}',{include_swipes:true}),base.messages))throw Error('聊天或消息已变化，请重新点击一键删除');
       const patches=changes.map(change=>{const original=base.messages.find(m=>m.message_id===change.message_id);if(!original||change.message_id>=base.token.message_id)throw Error('清理范围包含最新楼，已拒绝');return {message_id:change.message_id,swipe_id:original.swipe_id,swipes:C.clone(change.swipes),swipes_data:C.clone(original.swipes_data),swipes_info:C.clone(original.swipes_info)};});
@@ -102,7 +111,7 @@
   async function open(){if(disposed)return;try{
       ensureDrawer();if(!drawer)throw Error('扩展设置列表尚未就绪，请稍后重试');errorPanel?.remove();errorPanel=null;host.hidden=false;
     if(!app){if(!C||!globalThis.MvuViewerUI?.mount)throw Error('核心或界面模块未加载，请更新扩展后完整刷新');
-      try{app=globalThis.MvuViewerUI.mount(host,C,adapter,{version:'1.4.2',inline:true,onCleanup:openCleanup,onGallery:openGallery});}catch(e){host.remove();host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;drawer?.querySelector('.inline-drawer-content')?.append(host);throw e;}}
+      try{app=globalThis.MvuViewerUI.mount(host,C,adapter,{version:'1.4.3',inline:true,onCleanup:openCleanup,onGallery:openGallery});}catch(e){host.remove();host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;drawer?.querySelector('.inline-drawer-content')?.append(host);throw e;}}
     await app.open();const launch=drawer?.querySelector('button');if(launch)launch.textContent='刷新当前 MVU 数据';
   }catch(e){showError(e);}}
   ensureDrawer();
