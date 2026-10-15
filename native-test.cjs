@@ -4,8 +4,8 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
  const dom=new JSDOM('<body><div id="extensions_settings2"></div></body>',{runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window;
  w.TextEncoder=TextEncoder;w.confirm=()=>true;
  const events=new Map(),table={stat_data:{system:{points:7}},other:{keep:true}};let data=structuredClone(table);
- w.SillyTavern={getContext:()=>({chatId:'native',characterId:'card',eventTypes:{GENERATION_STARTED:'start',GENERATION_ENDED:'end'},eventSource:{on:(k,f)=>events.set(k,f),removeListener:k=>events.delete(k)}})};
- w.TavernHelper={getChatMessages:(id,o)=>[{message_id:0,name:'AI',role:'assistant',swipe_id:0,swipes:['hello']}],updateVariablesWith:(fn)=>{data=fn(structuredClone(data));}};
+ w.SillyTavern={getContext:()=>({chatId:'native',characterId:'card',eventSource:{on:(k,f)=>events.set(k,f),off:k=>events.delete(k)}})};
+ w.TavernHelper={tavern_events:{GENERATION_STARTED:'start',GENERATION_ENDED:'end'},getChatMessages:(id,o)=>[{message_id:0,name:'AI',role:'assistant',swipe_id:0,swipes:['hello']}],updateVariablesWith:(fn)=>{data=fn(structuredClone(data));}};
  w.Mvu={getMvuData:()=>structuredClone(data),events:{}};
  for(const name of ['core.js','ui.js'])w.eval(fs.readFileSync(path.join(__dirname,name),'utf8'));
  let adapter;const mount=w.MvuViewerUI.mount;w.MvuViewerUI.mount=(h,C,a,o)=>{adapter=a;return mount(h,C,a,o);};w.eval(fs.readFileSync(path.join(__dirname,'host.js'),'utf8'));

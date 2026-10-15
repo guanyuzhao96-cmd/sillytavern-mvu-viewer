@@ -24,7 +24,7 @@
   let generating=false,updating=false,disposed=false,mvuBound=null;
   const disposers=[],listeners=new Set();
   function signal(){for(const f of listeners)Promise.resolve(f()).catch(()=>{});}
-  function listen(name,callback){if(!name)return;if(H.event){const d=H.event(name,callback);if(d?.stop)disposers.push(()=>d.stop());}else{const source=context().eventSource;if(!source||typeof source.on!=='function'||typeof source.removeListener!=='function')throw Error('宿主事件接口不可用');source.on(name,callback);disposers.push(()=>source.removeListener(name,callback));}}
+  function listen(name,callback){if(!name)return;if(H.event){const d=H.event(name,callback);if(typeof d==='function')disposers.push(d);else if(d?.stop)disposers.push(()=>d.stop());}else{const source=context().eventSource;const off=source?.removeListener||source?.off;if(!source||typeof source.on!=='function'||typeof off!=='function')throw Error('宿主事件接口不可用');source.on(name,callback);disposers.push(()=>off.call(source,name,callback));}}
   function mvu(){const v=(typeof Mvu!=='undefined'?Mvu:null)||target.Mvu;if(!v||typeof v.getMvuData!=='function')throw Error('MVU 未就绪，请确认变量框架已启用，再点击刷新');return v;}
   function context(){const st=target.SillyTavern||window.SillyTavern;if(!st||typeof st.getContext!=='function')throw Error('未提供 SillyTavern 聊天身份接口，禁止写入');return st.getContext();}
   function requireHelper(){if(!H.messages)throw Error('酒馆助手消息读取接口不可用');}
@@ -51,6 +51,17 @@
   };
   let drawer=null,host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;
   let app=null,errorPanel=null,cleanupApp=null,galleryApp=null;
+  function createPage(id){
+    const shell=target.document.createElement('dialog'),page=target.document.createElement('div');
+    shell.setAttribute('aria-label',id==='mvu-viewer-gallery'?'角色图鉴':'聊天瘦身');
+    Object.assign(shell.style,{position:'fixed',inset:'0',margin:'0',padding:'0',border:'0',width:'100vw',height:'100dvh',maxWidth:'none',maxHeight:'none',overflow:'hidden'});
+    page.id=id;page.hidden=true;shell.append(page);target.document.body.append(shell);
+    const sync=()=>{if(page.hidden){if(shell.open)shell.close();}else if(!shell.open){if(typeof shell.showModal==='function')shell.showModal();else shell.setAttribute('open','');}};
+    const observer=new target.MutationObserver(sync);observer.observe(page,{attributes:true,attributeFilter:['hidden']});
+    shell.addEventListener('cancel',e=>{e.preventDefault();page.hidden=true;sync();});
+    disposers.push(()=>{observer.disconnect();if(shell.open&&shell.close)shell.close();shell.remove();});
+    return page;
+  }
   const cleanupAdapter={
     settings:()=>{const ctx=context();if(ctx.extensionSettings?.mvu_viewer_cleanup)return ctx.extensionSettings.mvu_viewer_cleanup;try{return JSON.parse(target.localStorage.getItem('mvu-viewer-cleanup-rules')||'{}');}catch(_){return {}; }},
     saveSettings:value=>{const ctx=context();if(ctx.extensionSettings&&typeof ctx.saveSettingsDebounced==='function'){ctx.extensionSettings.mvu_viewer_cleanup=value;ctx.saveSettingsDebounced();}else{target.localStorage.setItem('mvu-viewer-cleanup-rules',JSON.stringify(value));}},
@@ -65,9 +76,9 @@
       }finally{updating=false;signal();}
     }
   };
-  function openCleanup(){try{if(!cleanupApp){if(!globalThis.MvuViewerCleanup?.mount)throw Error('聊天瘦身模块未加载，请更新并刷新');const page=target.document.createElement('div');page.id='mvu-viewer-cleanup';page.hidden=true;target.document.body.append(page);try{cleanupApp=globalThis.MvuViewerCleanup.mount(page,cleanupAdapter);}catch(e){page.remove();throw e;}}cleanupApp.open();}catch(e){showError(e);}}
+  function openCleanup(){try{if(!cleanupApp){if(!globalThis.MvuViewerCleanup?.mount)throw Error('聊天瘦身模块未加载，请更新并刷新');const page=createPage('mvu-viewer-cleanup');try{cleanupApp=globalThis.MvuViewerCleanup.mount(page,cleanupAdapter);}catch(e){page.remove();throw e;}}cleanupApp.open();}catch(e){showError(e);}}
   const galleryAdapter={subscribe:adapter.subscribe,read:async()=>{const result=await adapter.read(-1);if(!C.equal(result.token,token(-1)))throw Error('聊天已变化，请刷新');const stat=result.table?.stat_data;if(!stat||typeof stat!=='object'||Array.isArray(stat))throw Error('最新楼层没有 MVU 数据');const ctx=context();const identity=ctx.groupId?'group:'+ctx.groupId:ctx.characters?.[ctx.characterId]?.avatar?'character:'+ctx.characters[ctx.characterId].avatar:'chat:'+result.token.chat_id;return {stat,scope:identity,title:'最新楼 #'+result.token.message_id+' · '+result.token.chat_id};}};
-  function openGallery(){if(disposed)return;try{if(!galleryApp){if(!globalThis.MvuViewerGallery?.mount)throw Error('角色图鉴模块未加载，请更新并刷新');const page=target.document.createElement('div');page.id='mvu-viewer-gallery';page.hidden=true;target.document.body.append(page);try{galleryApp=globalThis.MvuViewerGallery.mount(page,C,galleryAdapter);}catch(e){page.remove();throw e;}}galleryApp.open();}catch(e){showError(e);}}
+  function openGallery(){if(disposed)return;try{if(!galleryApp){if(!globalThis.MvuViewerGallery?.mount)throw Error('角色图鉴模块未加载，请更新并刷新');const page=createPage('mvu-viewer-gallery');try{galleryApp=globalThis.MvuViewerGallery.mount(page,C,galleryAdapter);}catch(e){page.remove();throw e;}}galleryApp.open();}catch(e){showError(e);}}
   function ensureDrawer(){
     if(disposed||drawer?.isConnected)return;
     const container=target.document.querySelector('#extensions_settings2, #extensions_settings');if(!container)return;
@@ -91,13 +102,13 @@
   async function open(){if(disposed)return;try{
       ensureDrawer();if(!drawer)throw Error('扩展设置列表尚未就绪，请稍后重试');errorPanel?.remove();errorPanel=null;host.hidden=false;
     if(!app){if(!C||!globalThis.MvuViewerUI?.mount)throw Error('核心或界面模块未加载，请更新扩展后完整刷新');
-      try{app=globalThis.MvuViewerUI.mount(host,C,adapter,{version:'1.4.1',inline:true,onCleanup:openCleanup,onGallery:openGallery});}catch(e){host.remove();host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;drawer?.querySelector('.inline-drawer-content')?.append(host);throw e;}}
+      try{app=globalThis.MvuViewerUI.mount(host,C,adapter,{version:'1.4.2',inline:true,onCleanup:openCleanup,onGallery:openGallery});}catch(e){host.remove();host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;drawer?.querySelector('.inline-drawer-content')?.append(host);throw e;}}
     await app.open();const launch=drawer?.querySelector('button');if(launch)launch.textContent='刷新当前 MVU 数据';
   }catch(e){showError(e);}}
   ensureDrawer();
   let eventsBound=false;
   function bindEvents(){if(eventsBound)return;
-    if(native){const ctx=context();H.tv=ctx.eventTypes||ctx.event_types||{};if(!H.tv.GENERATION_STARTED||!H.tv.GENERATION_ENDED)throw Error('宿主缺少生成事件，暂时只能查看，不能保存');}
+    if(native){const ctx=context();H.tv={...target.TavernHelper?.tavern_events,...target.tavern_events,...ctx.event_types,...ctx.eventTypes};if(!H.tv.GENERATION_STARTED||!H.tv.GENERATION_ENDED)throw Error('宿主缺少生成事件，暂时只能查看，不能保存');}
     const start=disposers.length;
     try{if(H.append&&H.button&&H.event){H.append([{name:'MVU 数据',visible:true}]);listen(H.button('MVU 数据'),open);}
       for(const k of ['CHAT_CHANGED','MESSAGE_SWIPED','MESSAGE_SENT','MESSAGE_RECEIVED','MESSAGE_DELETED','MESSAGE_UPDATED','MESSAGE_EDITED'])listen(H.tv[k],signal);
