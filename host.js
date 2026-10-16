@@ -26,11 +26,13 @@
   function signal(){for(const f of listeners)Promise.resolve(f()).catch(()=>{});}
   function listen(name,callback){if(!name)return;if(H.event){const d=H.event(name,callback);if(typeof d==='function')disposers.push(d);else if(d?.stop)disposers.push(()=>d.stop());}else{const source=context().eventSource;const off=source?.removeListener||source?.off;if(!source||typeof source.on!=='function'||typeof off!=='function')throw Error('宿主事件接口不可用');source.on(name,callback);disposers.push(()=>off.call(source,name,callback));}}
   function mvu(){const v=(typeof Mvu!=='undefined'?Mvu:null)||target.Mvu;if(!v||typeof v.getMvuData!=='function')throw Error('MVU 未就绪，请确认变量框架已启用，再点击刷新');return v;}
-  function context(){const st=target.SillyTavern||window.SillyTavern;if(!st||typeof st.getContext!=='function')throw Error('未提供 SillyTavern 聊天身份接口，禁止写入');return st.getContext();}
+  function context(){const bridge=target.MvuViewerNativeBridge;if(typeof bridge?.getContext==='function')return bridge.getContext();const st=target.SillyTavern||window.SillyTavern;if(!st||typeof st.getContext!=='function')throw Error('未提供 SillyTavern 聊天身份接口，禁止写入');return st.getContext();}
   function requireHelper(){if(!H.messages)throw Error('酒馆助手消息读取接口不可用');}
   function generationState(){
+    const bridge=target.MvuViewerNativeBridge;
+    if(typeof bridge?.generationState==='function'){const state=bridge.generationState();if(state.known)return state;}
     const ctx=context();
-    if(ctx.streamingProcessor&&!ctx.streamingProcessor.isFinished)return {known:true,active:true};
+    if(ctx.streamingProcessor&&!ctx.streamingProcessor.isFinished&&!ctx.streamingProcessor.isStopped&&!ctx.streamingProcessor.abortController?.signal?.aborted)return {known:true,active:true};
     const stop=target.document.getElementById('mes_stop');
     if(stop){let visible=!stop.hidden;for(let n=stop;n&&visible;n=n.parentElement){const style=target.getComputedStyle(n);visible=style.display!=='none'&&style.visibility!=='hidden'&&style.visibility!=='collapse';}return {known:true,active:visible};}
     return {known:eventsBound,active:generating};
@@ -40,8 +42,8 @@
     return {chat_id:String(chatId),character_id:String(ctx.characterId??''),group_id:String(ctx.groupId??''),message_id:message.message_id,swipe_id:message.swipe_id??0,message_text:(message.swipes||[])[message.swipe_id??0]||''};
   }
   const adapter={
-    busy:()=>generating||updating||generationState().active,
-    busyReason:()=>updating?'MVU 正在更新变量，完成后可编辑':generating||generationState().active?'AI 正在生成，结束后可编辑':'',
+    busy:()=>updating||generationState().active,
+    busyReason:()=>updating?'MVU 正在更新变量；草稿已保留，完成后可保存':generationState().active?'AI 正在生成；草稿已保留，结束后可保存':'',
     latest:()=>token(-1),
     list:()=>{requireHelper();return H.messages('0-{{lastMessageId}}').map(({message_id,role,name})=>({message_id,role,name}));},
     read:async id=>{const t=token(id);const table=C.clone(mvu().getMvuData({type:'message',message_id:t.message_id}));return {token:t,table};},
@@ -111,7 +113,7 @@
   async function open(){if(disposed)return;try{
       ensureDrawer();if(!drawer)throw Error('扩展设置列表尚未就绪，请稍后重试');errorPanel?.remove();errorPanel=null;host.hidden=false;
     if(!app){if(!C||!globalThis.MvuViewerUI?.mount)throw Error('核心或界面模块未加载，请更新扩展后完整刷新');
-      try{app=globalThis.MvuViewerUI.mount(host,C,adapter,{version:'1.4.3',inline:true,onCleanup:openCleanup,onGallery:openGallery});}catch(e){host.remove();host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;drawer?.querySelector('.inline-drawer-content')?.append(host);throw e;}}
+      try{app=globalThis.MvuViewerUI.mount(host,C,adapter,{version:'1.5.0',inline:true,onCleanup:openCleanup,onGallery:openGallery});}catch(e){host.remove();host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;drawer?.querySelector('.inline-drawer-content')?.append(host);throw e;}}
     await app.open();const launch=drawer?.querySelector('button');if(launch)launch.textContent='刷新当前 MVU 数据';
   }catch(e){showError(e);}}
   ensureDrawer();

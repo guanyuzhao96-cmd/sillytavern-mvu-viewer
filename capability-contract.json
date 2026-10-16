@@ -8,7 +8,7 @@
     {
       "id": "host-context",
       "owner": "sillytavern",
-      "symbol": "SillyTavern.getContext",
+      "symbol": "scripts/st-context.js:getContext (native), SillyTavern.getContext (helper script fallback)",
       "required": true,
       "fallback": null
     },
@@ -16,8 +16,15 @@
       "id": "host-events",
       "owner": "sillytavern",
       "symbol": "SillyTavern.getContext().eventSource",
-      "required": true,
-      "fallback": null
+      "required": false,
+      "fallback": "Read live native generation state; subscriptions are refresh notifications"
+    },
+    {
+      "id": "native-generation-state",
+      "owner": "sillytavern",
+      "symbol": "script.js:isGenerating",
+      "required": false,
+      "fallback": "script.js:is_send_press + group-chats.js:is_group_generating; unknown state refuses writes"
     },
     {
       "id": "message-read",
