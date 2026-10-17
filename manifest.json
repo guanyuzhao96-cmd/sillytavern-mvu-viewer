@@ -1,9 +1,9 @@
 {
   "display_name": "MVU 数据查看器",
   "loading_order": 100,
-  "js": "index-v1.5.2.js",
+  "js": "index-v1.5.3.js",
   "author": "guanyuzhao96-cmd",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "homePage": "https://github.com/guanyuzhao96-cmd/sillytavern-mvu-viewer",
   "auto_update": false,
   "hooks": {

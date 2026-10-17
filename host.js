@@ -72,18 +72,27 @@
     disposers.push(()=>{observer.disconnect();if(shell.open&&shell.close)shell.close();shell.remove();});
     return page;
   }
+  function cleanupMessages(){
+    return globalThis.MvuViewerCleanup.normalizeMessages(H.messages('0-{{lastMessageId}}',{include_swipes:true}),context().chat);
+  }
+  function cleanupToken(messages){
+    const last=messages.at(-1),ctx=context();if(!last||ctx.chatId===undefined||ctx.chatId===null||ctx.chatId==='')throw Error('当前没有可识别的聊天');
+    return {chat_id:String(ctx.chatId),character_id:String(ctx.characterId??''),group_id:String(ctx.groupId??''),message_id:last.message_id,swipe_id:last.swipe_id??0,message_text:last.swipes?.[last.swipe_id??0]??''};
+  }
   const cleanupAdapter={
     settings:()=>{const ctx=context();if(ctx.extensionSettings?.mvu_viewer_cleanup)return ctx.extensionSettings.mvu_viewer_cleanup;try{return JSON.parse(target.localStorage.getItem('mvu-viewer-cleanup-rules')||'{}');}catch(_){return {}; }},
     saveSettings:value=>{const ctx=context();if(ctx.extensionSettings&&typeof ctx.saveSettingsDebounced==='function'){ctx.extensionSettings.mvu_viewer_cleanup=value;ctx.saveSettingsDebounced();}else{target.localStorage.setItem('mvu-viewer-cleanup-rules',JSON.stringify(value));}},
-    snapshot:async()=>{if(adapter.busy())throw Error('正在生成或更新，请稍后清理');return {format:'mvu-viewer-chat-cleanup-backup-v1',token:C.clone(token(-1)),messages:C.clone(H.messages('0-{{lastMessageId}}',{include_swipes:true}))};},
+    snapshot:async()=>{if(adapter.busy())throw Error('正在生成或更新，请稍后清理');return {format:'mvu-viewer-chat-cleanup-backup-v1',...(()=>{const messages=cleanupMessages();return {token:cleanupToken(messages),messages,...(Array.isArray(context().chat)?{raw_messages:C.clone(context().chat)}:{})};})()};},
     commit:async(base,changes,options={})=>{
       if(!generationState().known)throw Error('无法确认生成状态，未执行删除；请先打开酒馆聊天界面');
       const setter=typeof setChatMessages==='function'?setChatMessages:target.TavernHelper?.setChatMessages;if(typeof setter!=='function')throw Error('酒馆助手消息修改接口未就绪');
-      if(adapter.busy()||!C.equal(token(-1),base.token)||!C.equal(H.messages('0-{{lastMessageId}}',{include_swipes:true}),base.messages))throw Error('聊天或消息已变化，请重新点击一键删除');
-      const patches=changes.map(change=>{const original=base.messages.find(m=>m.message_id===change.message_id);if(!original||(!options.allowLatest&&change.message_id>=base.token.message_id))throw Error('清理范围包含最新楼，已拒绝');const patch={message_id:change.message_id};for(const key of ['swipes','swipes_data','swipes_info'])if(Object.prototype.hasOwnProperty.call(change,key))patch[key]=C.clone(change[key]);if(Object.prototype.hasOwnProperty.call(change,'swipes')){patch.swipe_id=change.swipe_id??original.swipe_id;if(!Object.prototype.hasOwnProperty.call(change,'swipes_data'))patch.swipes_data=C.clone(original.swipes_data);if(!Object.prototype.hasOwnProperty.call(change,'swipes_info'))patch.swipes_info=C.clone(original.swipes_info);}return patch;});
-      updating=true;signal();try{await setter(patches,{refresh:'all'});
-        if(!C.equal(token(-1),base.token))throw Error('写入期间聊天变化，部分内容可能已删除，请检查备份');
-        for(const patch of patches){const actual=H.messages(patch.message_id,{include_swipes:true})[0];if(!actual||Object.keys(patch).some(key=>key!=='message_id'&&!C.equal(actual[key],patch[key])))throw Error('清理后核对失败，部分内容可能已删除，请检查备份');}
+      const current=cleanupMessages();if(adapter.busy()||!C.equal(cleanupToken(current),base.token)||!C.equal(current,base.messages))throw Error('聊天或消息已变化，请重新点击一键删除');
+      const patches=changes.map(change=>{const original=base.messages.find(m=>m.message_id===change.message_id);if(!original||(!options.allowLatest&&change.message_id>=base.token.message_id))throw Error('清理范围包含最新楼，已拒绝');const patch={message_id:change.message_id,swipe_id:original.swipe_id??0};for(const key of ['swipes','swipes_data','swipes_info'])if(Array.isArray(original[key]))patch[key]=C.clone(original[key]);for(const key of ['swipes','swipes_data','swipes_info'])if(Object.prototype.hasOwnProperty.call(change,key))patch[key]=C.clone(change[key]);if(Object.prototype.hasOwnProperty.call(change,'swipes')){patch.swipe_id=change.swipe_id??original.swipe_id;if(!Object.prototype.hasOwnProperty.call(change,'swipes_data'))patch.swipes_data=C.clone(original.swipes_data);if(!Object.prototype.hasOwnProperty.call(change,'swipes_info'))patch.swipes_info=C.clone(original.swipes_info);}return patch;});
+      const expected=C.clone(base.messages);for(const patch of patches)Object.assign(expected.find(m=>m.message_id===patch.message_id),patch);
+      updating=true;signal();try{await setter(patches,{refresh:'none'});
+        const ctx=context();if(typeof ctx.saveChat==='function')await ctx.saveChat();
+        const actualMessages=cleanupMessages();if(!C.equal(cleanupToken(actualMessages),cleanupToken(expected)))throw Error('写入期间聊天变化，部分内容可能已删除，请检查备份');
+        for(const patch of patches){const actual=actualMessages.find(m=>m.message_id===patch.message_id);if(!actual||Object.keys(patch).some(key=>key!=='message_id'&&!C.equal(actual[key],patch[key])))throw Error('清理后核对失败，部分内容可能已删除，请检查备份');}
       }finally{updating=false;signal();}
     }
   };
@@ -114,7 +123,7 @@
   async function open(){if(disposed)return;try{
       ensureDrawer();if(!drawer)throw Error('扩展设置列表尚未就绪，请稍后重试');errorPanel?.remove();errorPanel=null;host.hidden=false;
     if(!app){if(!C||!globalThis.MvuViewerUI?.mount)throw Error('核心或界面模块未加载，请更新扩展后完整刷新');
-      try{app=globalThis.MvuViewerUI.mount(host,C,adapter,{version:'1.5.2',inline:true,onCleanup:openCleanup,onGallery:openGallery});}catch(e){host.remove();host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;drawer?.querySelector('.inline-drawer-content')?.append(host);throw e;}}
+      try{app=globalThis.MvuViewerUI.mount(host,C,adapter,{version:'1.5.3',inline:true,onCleanup:openCleanup,onGallery:openGallery});}catch(e){host.remove();host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;drawer?.querySelector('.inline-drawer-content')?.append(host);throw e;}}
     await app.open();const launch=drawer?.querySelector('button');if(launch)launch.textContent='刷新当前 MVU 数据';
   }catch(e){showError(e);}}
   ensureDrawer();
