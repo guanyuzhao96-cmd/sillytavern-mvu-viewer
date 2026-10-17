@@ -99,9 +99,10 @@
     const title=target.document.createElement('strong');title.textContent='MVU 数据查看器';
     const icon=target.document.createElement('div');icon.className='inline-drawer-icon fa-solid fa-circle-chevron-down down';heading.append(title,icon);
     const content=target.document.createElement('div');content.className='inline-drawer-content';
-    const launch=target.document.createElement('button');launch.type='button';launch.className='menu_button';launch.textContent='读取 / 刷新当前 MVU 数据';launch.setAttribute('aria-label','读取或刷新当前 MVU 数据');
-    const cleanup=target.document.createElement('button');cleanup.type='button';cleanup.className='menu_button';cleanup.textContent='聊天瘦身 · 编辑删除规则';cleanup.onclick=openCleanup;
-    const gallery=target.document.createElement('button');gallery.type='button';gallery.className='menu_button';gallery.textContent='角色图鉴';gallery.onclick=openGallery;launch.onclick=open;content.append(launch,cleanup,gallery,host);inline.append(heading,content);drawer.append(inline);container.append(drawer);
+    const menuButton=(text,action)=>{const button=target.document.createElement('button');button.type='button';button.className='menu_button mvu-viewer-menu-button';button.textContent=text;button.style.width='100%';button.style.maxWidth='100%';button.style.minWidth='0';button.style.boxSizing='border-box';button.style.justifyContent='flex-start';button.style.textAlign='left';button.style.whiteSpace='normal';button.onclick=action;return button;};
+    const launch=menuButton('读取 / 刷新当前 MVU 数据',open);launch.setAttribute('aria-label','读取或刷新当前 MVU 数据');
+    const cleanup=menuButton('聊天瘦身 · 编辑删除规则',openCleanup);
+    const gallery=menuButton('角色图鉴',openGallery);content.append(launch,cleanup,gallery,host);inline.append(heading,content);drawer.append(inline);container.append(drawer);
   }
   function showError(e){
     const launch=drawer?.querySelector('button');if(launch){launch.textContent='MVU 数据查看器 · 启动失败';launch.title=e.message||String(e);}
@@ -113,7 +114,7 @@
   async function open(){if(disposed)return;try{
       ensureDrawer();if(!drawer)throw Error('扩展设置列表尚未就绪，请稍后重试');errorPanel?.remove();errorPanel=null;host.hidden=false;
     if(!app){if(!C||!globalThis.MvuViewerUI?.mount)throw Error('核心或界面模块未加载，请更新扩展后完整刷新');
-      try{app=globalThis.MvuViewerUI.mount(host,C,adapter,{version:'1.5.0',inline:true,onCleanup:openCleanup,onGallery:openGallery});}catch(e){host.remove();host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;drawer?.querySelector('.inline-drawer-content')?.append(host);throw e;}}
+      try{app=globalThis.MvuViewerUI.mount(host,C,adapter,{version:'1.5.1',inline:true,onCleanup:openCleanup,onGallery:openGallery});}catch(e){host.remove();host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;drawer?.querySelector('.inline-drawer-content')?.append(host);throw e;}}
     await app.open();const launch=drawer?.querySelector('button');if(launch)launch.textContent='刷新当前 MVU 数据';
   }catch(e){showError(e);}}
   ensureDrawer();
