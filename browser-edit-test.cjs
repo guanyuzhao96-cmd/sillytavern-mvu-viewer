@@ -16,13 +16,13 @@ document.getElementById('settings').showModal();
 document.getElementById('error-stream').onclick=()=>{setActive(false);events.emit('start');};
 document.getElementById('active').onclick=()=>{setActive(true);events.emit('start');};
 document.getElementById('idle').onclick=()=>{setActive(false);events.emit('end');};
-await import('/scripts/extensions/third-party/mvu/index-v1.6.0.js');
+await import('/scripts/extensions/third-party/mvu/index-v1.6.1.js');
 </script></html>`;
 const nativeScript=`let active=false;const map=new Map();export const isGenerating=()=>active;export function setActive(v){active=v}export const events={on(n,f){if(!map.has(n))map.set(n,new Set());map.get(n).add(f)},off(n,f){map.get(n)?.delete(f)},emit(n){for(const f of map.get(n)||[])f()}};`;
 (async()=>{
  const server=http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost');
-  if(url.pathname==='/'){res.setHeader('content-type','text/html;charset=utf-8');res.end(baseline?html.replace('index-v1.6.0.js','index-v1.4.3.js'):html);return;}
+  if(url.pathname==='/'){res.setHeader('content-type','text/html;charset=utf-8');res.end(baseline?html.replace('index-v1.6.1.js','index-v1.4.3.js'):html);return;}
   if(url.pathname==='/state.json'){res.setHeader('content-type','application/json');res.end(JSON.stringify(state));return;}
   if(url.pathname==='/save'){let data='';for await(const c of req)data+=c;state=JSON.parse(data);writes++;res.end('ok');return;}
   if(url.pathname==='/script.js'){res.setHeader('content-type','text/javascript');res.end(nativeScript);return;}
