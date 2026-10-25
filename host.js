@@ -99,7 +99,7 @@
   function openCleanup(){try{if(!cleanupApp){if(!globalThis.MvuViewerCleanup?.mount)throw Error('聊天瘦身模块未加载，请更新并刷新');const page=createPage('mvu-viewer-cleanup');try{cleanupApp=globalThis.MvuViewerCleanup.mount(page,cleanupAdapter);}catch(e){page.remove();throw e;}}cleanupApp.open();}catch(e){showError(e);}}
   const galleryAdapter={subscribe:adapter.subscribe,read:async()=>{const result=await adapter.read(-1);if(!C.equal(result.token,token(-1)))throw Error('聊天已变化，请刷新');const stat=result.table?.stat_data;if(!stat||typeof stat!=='object'||Array.isArray(stat))throw Error('最新楼层没有 MVU 数据');const ctx=context();const identity=ctx.groupId?'group:'+ctx.groupId:ctx.characters?.[ctx.characterId]?.avatar?'character:'+ctx.characters[ctx.characterId].avatar:'chat:'+result.token.chat_id;return {stat,scope:identity,title:'最新楼 #'+result.token.message_id+' · '+result.token.chat_id};}};
   function openGallery(){if(disposed)return;try{if(!galleryApp){if(!globalThis.MvuViewerGallery?.mount)throw Error('角色图鉴模块未加载，请更新并刷新');const page=createPage('mvu-viewer-gallery');try{galleryApp=globalThis.MvuViewerGallery.mount(page,C,galleryAdapter);}catch(e){page.remove();throw e;}}galleryApp.open();}catch(e){showError(e);}}
-  async function openWorldbooks(){if(disposed)return;try{if(!worldbooksApp){if(!globalThis.MvuViewerWorldbooks?.mount)throw Error('世界书管理模块未加载，请更新并刷新');const {createWorldbookAdapter}=await import('./worldbooks-native.mjs?v=1.6.2');if(disposed)return;if(!worldbooksApp)worldbooksApp=globalThis.MvuViewerWorldbooks.mount(createPage('mvu-viewer-worldbooks'),createWorldbookAdapter());}await worldbooksApp.open();}catch(e){showError(e);}}
+  async function openWorldbooks(){if(disposed)return;try{if(!worldbooksApp){if(!globalThis.MvuViewerWorldbooks?.mount)throw Error('世界书管理模块未加载，请更新并刷新');const {createWorldbookAdapter}=await import('./worldbooks-native.mjs?v=1.6.3');if(disposed)return;if(!worldbooksApp)worldbooksApp=globalThis.MvuViewerWorldbooks.mount(createPage('mvu-viewer-worldbooks'),createWorldbookAdapter());}await worldbooksApp.open();}catch(e){showError(e);}}
   function ensureDrawer(){
     if(disposed||drawer?.isConnected)return;
     const container=target.document.querySelector('#extensions_settings2, #extensions_settings');if(!container)return;
@@ -124,7 +124,7 @@
   async function open(){if(disposed)return;try{
       ensureDrawer();if(!drawer)throw Error('扩展设置列表尚未就绪，请稍后重试');errorPanel?.remove();errorPanel=null;host.hidden=false;
     if(!app){if(!C||!globalThis.MvuViewerUI?.mount)throw Error('核心或界面模块未加载，请更新扩展后完整刷新');
-      try{app=globalThis.MvuViewerUI.mount(host,C,adapter,{version:'1.6.2',inline:true,onCleanup:openCleanup,onGallery:openGallery});}catch(e){host.remove();host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;drawer?.querySelector('.inline-drawer-content')?.append(host);throw e;}}
+      try{app=globalThis.MvuViewerUI.mount(host,C,adapter,{version:'1.6.3',inline:true,onCleanup:openCleanup,onGallery:openGallery});}catch(e){host.remove();host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;drawer?.querySelector('.inline-drawer-content')?.append(host);throw e;}}
     await app.open();const launch=drawer?.querySelector('button');if(launch)launch.textContent='刷新当前 MVU 数据';
   }catch(e){showError(e);}}
   ensureDrawer();

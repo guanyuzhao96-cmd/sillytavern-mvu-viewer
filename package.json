@@ -1,6 +1,6 @@
 {
   "name": "sillytavern-mvu-viewer",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "private": true,
   "scripts": {
     "test": "node run-tests.cjs",

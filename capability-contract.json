@@ -81,6 +81,20 @@
       "symbol": "world-info.js:worldInfoCache.delete, selected_world_info, setWorldInfoButtonClass; script.js:saveSettingsDebounced, saveCharacterDebounced; jQuery; /api/worldinfo/delete",
       "required": false,
       "fallback": "Use serial native deletion when complete cache/global/character cleanup contract is unavailable; final verification reuses one refreshed list"
+    },
+    {
+      "id": "worldbook-import",
+      "owner": "sillytavern",
+      "symbol": "/api/worldinfo/import (multipart avatar); script.js:getRequestHeaders; /api/worldinfo/get; world-info.js:updateWorldInfoList",
+      "required": false,
+      "fallback": "Report import errors; existing export/delete remain separate"
+    },
+    {
+      "id": "worldbook-zip-inflate",
+      "owner": "provider",
+      "symbol": "DecompressionStream:deflate-raw",
+      "required": false,
+      "fallback": "STORE ZIP and JSON still supported; ask user to unzip compressed files in older browsers"
     }
   ]
 }

@@ -2,21 +2,30 @@
 const {chromium}=require('playwright'),http=require('http'),fs=require('fs'),path=require('path'),assert=require('assert/strict');
 const sample={entries:{0:{uid:0,key:['测试'],content:'保留中文',extensions:{unknown:42}}},unknown:{retain:true}};
 let db={'甲世界书':structuredClone(sample),'乙世界书':structuredClone(sample),'丙世界书':structuredClone(sample)};
-let removed=[],failName=null,noOpName=null,fast=true,listCount=0,deleteCount=0,active=0,peak=0,readCount=0,downloads=0;
+let removed=[],failName=null,noOpName=null,fast=true,listCount=0,deleteCount=0,active=0,peak=0,readCount=0,downloads=0,importCount=0,importActive=0,importPeak=0,failImport=null,fakeImport=null;
 const resetMetrics=()=>{listCount=deleteCount=active=peak=0;removed=[]};
 const html=`<meta name="viewport" content="width=device-width,initial-scale=1"><style>.menu_button{width:min-content}body{margin:8px}</style><div id="extensions_settings2"></div><script type="module">
 window.metrics={settings:0,character:0,editor:0,characterChange:0,characterWorld:'乙世界书'};
 window.jQuery=selector=>({val(value){if(arguments.length){window.metrics.characterWorld=value;return this}return window.metrics.characterWorld},trigger(){window.metrics[selector==='#character_world'?'characterChange':'editor']++;return this}});
 window.SillyTavern={getContext:()=>({eventSource:{on(){},off(){}},eventTypes:{}})};
-window.worlds=await import('/scripts/world-info.js');await import('/scripts/extensions/third-party/mvu/index-v1.6.2.js');</script>`;
+window.worlds=await import('/scripts/world-info.js');await import('/scripts/extensions/third-party/mvu/index-v1.6.3.js');</script>`;
 const worldModule=()=>`export let world_names=[];export const worldInfoCache=${fast?'new Map('+JSON.stringify(Object.keys(db).map(n=>[n,sample]))+')':'undefined'};export const selected_world_info=['乙世界书','untouched'];export function setWorldInfoButtonClass(){window.metrics.buttonCleared=true}
 export async function updateWorldInfoList(){const r=await fetch('/list');if(!r.ok)throw Error('fixture list failure');world_names=await r.json()}
 export async function deleteWorldInfo(name){const r=await fetch('/api/worldinfo/delete',{method:'POST',body:JSON.stringify({name})});if(!r.ok)return false;worldInfoCache?.delete(name);const i=selected_world_info.indexOf(name);if(i!==-1){selected_world_info.splice(i,1);window.metrics.settings++}await updateWorldInfoList();return true}`;
 (async()=>{const server=http.createServer(async(req,res)=>{
- const url=new URL(req.url,'http://localhost');let body='';for await(const c of req)body+=c;
+ const url=new URL(req.url,'http://localhost');const chunks=[];for await(const c of req)chunks.push(c);const raw=Buffer.concat(chunks),body=raw.toString('utf8');
  if(url.pathname==='/'){res.setHeader('Content-Type','text/html;charset=utf-8');return res.end(html)}
  if(url.pathname==='/list'){listCount++;res.setHeader('Content-Type','application/json');return res.end(JSON.stringify(Object.keys(db)))}
  if(url.pathname==='/api/worldinfo/get'){readCount++;const n=JSON.parse(body).name;res.setHeader('Content-Type','application/json');if(!db[n])res.statusCode=404;return res.end(JSON.stringify(db[n]||{}))}
+ if(url.pathname==='/api/worldinfo/import'){
+  importCount++;importActive++;importPeak=Math.max(importPeak,importActive);await new Promise(r=>setTimeout(r,10));importActive--;
+  assert.match(req.headers['content-type'],/^multipart\/form-data; boundary=/);
+  const form=await new Request('http://fixture/import',{method:'POST',headers:req.headers,body:raw}).formData();
+  const file=form.get('avatar'),name=file.name.replace(/\.json$/i,'');
+  if(name===failImport){res.statusCode=500;return res.end('fixture import failure')}
+  const data=JSON.parse(await file.text());if(name!==fakeImport)db[name]=data;
+  res.setHeader('Content-Type','application/json');return res.end(JSON.stringify({name}));
+ }
  if(url.pathname==='/api/worldinfo/delete'){
   const n=JSON.parse(body).name;deleteCount++;active++;peak=Math.max(peak,active);await new Promise(r=>setTimeout(r,10));active--;
   if(n===failName){res.statusCode=500;return res.end('fixture failure')}
@@ -50,6 +59,25 @@ try{
  await root.locator('#clear').click();await root.locator('#delete').click();await status.filter({hasText:'请先勾选'}).waitFor();assert.equal(deleteCount,1);
  // Missing cache/cleanup contract falls back to serial native API, without the old extra per-book refresh.
  db={A:structuredClone(sample),B:structuredClone(sample),C:structuredClone(sample)};noOpName=null;fast=false;await page.reload();await open();await waitCount(3);await root.locator('#all').click();resetMetrics();await root.locator('#delete').click();await status.filter({hasText:'删除成功 3/3'}).waitFor();assert.equal(peak,1);assert.equal(deleteCount,3);assert.equal(listCount,4);
- await page.reload();await open();await waitCount(0);assert.equal(downloads,1);assert.deepEqual(errors,[]);
- console.log('PASS Chromium mobile: full entry; 100 deletes + 1 list refresh, concurrency=3; final persisted state; cache/global/current-character cleanup once; partial failure/inflight; false success; serial compatibility 3 deletes + 4 list refreshes; no backups/confirmation. Fixture host only.');
+ await page.reload();await open();await waitCount(0);assert.equal(downloads,1);
+ // Actual file picker -> multipart import -> server readback -> fresh page.
+ fast=true;db={};await page.reload();await open();await waitCount(0);
+ const jsonFile=(name,data)=>({name,mimeType:'application/json',buffer:Buffer.from(JSON.stringify(data))});
+ const upload=async files=>{const chooser=page.waitForEvent('filechooser');await root.locator('#import').click();await(await chooser).setFiles(files);};
+ const zipPayload={name:'backup.zip',mimeType:'application/zip',buffer:fs.readFileSync(path.join(__dirname,'worldbooks-export-test.zip'))};
+ const beforeImportList=listCount;importCount=0;importPeak=0;
+ await upload([jsonFile('导入甲.json',sample),jsonFile('导入乙.json',sample),zipPayload,{name:'bad.json',mimeType:'application/json',buffer:Buffer.from('{bad')}]);
+ await status.filter({hasText:'导入成功 3 本；跳过 0 本；失败 1 项'}).waitFor();assert.equal(importCount,3);assert.equal(importPeak,3);assert.equal(listCount-beforeImportList,2);assert.deepEqual(db['导入甲'],sample);assert.deepEqual(db['乙世界书'],sample);
+ await page.reload();await open();await waitCount(3);
+ await upload([jsonFile('导入甲.json',{entries:{0:{content:'must not overwrite'}}})]);await status.filter({hasText:'导入成功 0 本；跳过 1 本'}).waitFor();assert.deepEqual(db['导入甲'],sample);assert.equal(importCount,3);
+ const compressedZip=require('node:child_process').execFileSync('python',['-c',"import sys,io,zipfile; b=io.BytesIO(); z=zipfile.ZipFile(b,'w',zipfile.ZIP_DEFLATED); z.writestr('folder/compressed-book.json',sys.stdin.read()); z.close(); sys.stdout.buffer.write(b.getvalue())"],{input:JSON.stringify(sample)});
+ await upload([{name:'compressed.zip',mimeType:'application/zip',buffer:compressedZip}]);await status.filter({hasText:'导入成功 1 本'}).waitFor();assert.deepEqual(db['compressed-book'],sample);
+ await root.getByLabel('导入同名处理').selectOption('copy');await upload([jsonFile('导入甲.json',sample)]);await status.filter({hasText:'导入成功 1 本'}).waitFor();assert.deepEqual(db['导入甲 (2)'],sample);
+ await root.getByLabel('导入同名处理').selectOption('overwrite');await page.evaluate(()=>window.worlds.worldInfoCache.set('导入甲',{stale:true}));
+ const changed={...sample,unknown:{retain:'updated'}};await upload([jsonFile('导入甲.json',changed)]);await status.filter({hasText:'导入成功 1 本'}).waitFor();assert.deepEqual(db['导入甲'],changed);assert.equal(await page.evaluate(()=>window.worlds.worldInfoCache.has('导入甲')),false);
+ await root.getByLabel('导入同名处理').selectOption('skip');failImport='server-fail';fakeImport='fake-success';
+ await upload([jsonFile('server-fail.json',sample),jsonFile('fake-success.json',sample),jsonFile('still-imports.json',sample)]);await status.filter({hasText:'导入成功 1 本；跳过 0 本；失败 2 项'}).waitFor();assert.deepEqual(db['still-imports'],sample);assert.equal(db['fake-success'],undefined);
+ await page.reload();await open();await waitCount(6);
+ assert.deepEqual(errors,[]);
+ console.log('PASS Chromium mobile: full entry; 100 deletes + 1 list refresh, concurrency=3; final persisted state; cache/global/current-character cleanup once; partial failure/inflight; false success; serial compatibility 3 deletes + 4 list refreshes; no backups/confirmation; multi-file and ZIP import picker, native multipart, readback, duplicates skip/copy/overwrite, invalid JSON, HTTP failure and fake success, refresh persistence. Fixture host only.');
 }finally{await browser?.close();await new Promise(r=>server.close(r))}})().catch(e=>{console.error(e);process.exitCode=1});
