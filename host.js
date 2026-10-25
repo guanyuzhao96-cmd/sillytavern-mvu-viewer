@@ -60,10 +60,10 @@
     subscribe:f=>{listeners.add(f);return()=>listeners.delete(f);}
   };
   let drawer=null,host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;
-  let app=null,errorPanel=null,cleanupApp=null,galleryApp=null;
+  let app=null,errorPanel=null,cleanupApp=null,galleryApp=null,worldbooksApp=null;
   function createPage(id){
     const shell=target.document.createElement('dialog'),page=target.document.createElement('div');
-    shell.setAttribute('aria-label',id==='mvu-viewer-gallery'?'角色图鉴':'聊天瘦身');
+    shell.setAttribute('aria-label',id==='mvu-viewer-worldbooks'?'世界书管理':id==='mvu-viewer-gallery'?'角色图鉴':'聊天瘦身');
     Object.assign(shell.style,{position:'fixed',inset:'0',margin:'0',padding:'0',border:'0',width:'100vw',height:'100dvh',maxWidth:'none',maxHeight:'none',overflow:'hidden'});
     page.id=id;page.hidden=true;shell.append(page);target.document.body.append(shell);
     const sync=()=>{if(page.hidden){if(shell.open)shell.close();}else if(!shell.open){if(typeof shell.showModal==='function')shell.showModal();else shell.setAttribute('open','');}};
@@ -99,6 +99,7 @@
   function openCleanup(){try{if(!cleanupApp){if(!globalThis.MvuViewerCleanup?.mount)throw Error('聊天瘦身模块未加载，请更新并刷新');const page=createPage('mvu-viewer-cleanup');try{cleanupApp=globalThis.MvuViewerCleanup.mount(page,cleanupAdapter);}catch(e){page.remove();throw e;}}cleanupApp.open();}catch(e){showError(e);}}
   const galleryAdapter={subscribe:adapter.subscribe,read:async()=>{const result=await adapter.read(-1);if(!C.equal(result.token,token(-1)))throw Error('聊天已变化，请刷新');const stat=result.table?.stat_data;if(!stat||typeof stat!=='object'||Array.isArray(stat))throw Error('最新楼层没有 MVU 数据');const ctx=context();const identity=ctx.groupId?'group:'+ctx.groupId:ctx.characters?.[ctx.characterId]?.avatar?'character:'+ctx.characters[ctx.characterId].avatar:'chat:'+result.token.chat_id;return {stat,scope:identity,title:'最新楼 #'+result.token.message_id+' · '+result.token.chat_id};}};
   function openGallery(){if(disposed)return;try{if(!galleryApp){if(!globalThis.MvuViewerGallery?.mount)throw Error('角色图鉴模块未加载，请更新并刷新');const page=createPage('mvu-viewer-gallery');try{galleryApp=globalThis.MvuViewerGallery.mount(page,C,galleryAdapter);}catch(e){page.remove();throw e;}}galleryApp.open();}catch(e){showError(e);}}
+  async function openWorldbooks(){if(disposed)return;try{if(!worldbooksApp){if(!globalThis.MvuViewerWorldbooks?.mount)throw Error('世界书管理模块未加载，请更新并刷新');const {createWorldbookAdapter}=await import('./worldbooks-native.mjs?v=1.6.0');if(disposed)return;if(!worldbooksApp)worldbooksApp=globalThis.MvuViewerWorldbooks.mount(createPage('mvu-viewer-worldbooks'),createWorldbookAdapter());}await worldbooksApp.open();}catch(e){showError(e);}}
   function ensureDrawer(){
     if(disposed||drawer?.isConnected)return;
     const container=target.document.querySelector('#extensions_settings2, #extensions_settings');if(!container)return;
@@ -111,7 +112,7 @@
     const menuButton=(text,action)=>{const button=target.document.createElement('button');button.type='button';button.className='menu_button mvu-viewer-menu-button';button.textContent=text;button.style.width='100%';button.style.maxWidth='100%';button.style.minWidth='0';button.style.boxSizing='border-box';button.style.justifyContent='flex-start';button.style.textAlign='left';button.style.whiteSpace='normal';button.onclick=action;return button;};
     const launch=menuButton('读取 / 刷新当前 MVU 数据',open);launch.setAttribute('aria-label','读取或刷新当前 MVU 数据');
     const cleanup=menuButton('聊天瘦身 · 编辑删除规则',openCleanup);
-    const gallery=menuButton('角色图鉴',openGallery);content.append(launch,cleanup,gallery,host);inline.append(heading,content);drawer.append(inline);container.append(drawer);
+    const gallery=menuButton('角色图鉴',openGallery);const worldbooks=menuButton('世界书管理 · 批量导出 / 删除',openWorldbooks);content.append(launch,cleanup,gallery,worldbooks,host);inline.append(heading,content);drawer.append(inline);container.append(drawer);
   }
   function showError(e){
     const launch=drawer?.querySelector('button');if(launch){launch.textContent='MVU 数据查看器 · 启动失败';launch.title=e.message||String(e);}
@@ -123,7 +124,7 @@
   async function open(){if(disposed)return;try{
       ensureDrawer();if(!drawer)throw Error('扩展设置列表尚未就绪，请稍后重试');errorPanel?.remove();errorPanel=null;host.hidden=false;
     if(!app){if(!C||!globalThis.MvuViewerUI?.mount)throw Error('核心或界面模块未加载，请更新扩展后完整刷新');
-      try{app=globalThis.MvuViewerUI.mount(host,C,adapter,{version:'1.5.3',inline:true,onCleanup:openCleanup,onGallery:openGallery});}catch(e){host.remove();host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;drawer?.querySelector('.inline-drawer-content')?.append(host);throw e;}}
+      try{app=globalThis.MvuViewerUI.mount(host,C,adapter,{version:'1.6.0',inline:true,onCleanup:openCleanup,onGallery:openGallery});}catch(e){host.remove();host=target.document.createElement('div');host.id='tw-mvu-viewer-v1';host.hidden=true;drawer?.querySelector('.inline-drawer-content')?.append(host);throw e;}}
     await app.open();const launch=drawer?.querySelector('button');if(launch)launch.textContent='刷新当前 MVU 数据';
   }catch(e){showError(e);}}
   ensureDrawer();
@@ -138,7 +139,7 @@
   try{bindEvents();}catch(_){}
   // 不复制事件字符串；使用实际安装导出的常量。
   const poll=setInterval(()=>{ensureDrawer();if(!eventsBound)try{bindEvents();signal();}catch(_){}try{const v=mvu();if(v===mvuBound)return;mvuBound=v;listen(v.events?.VARIABLE_UPDATE_STARTED,()=>{updating=true;signal();});listen(v.events?.VARIABLE_UPDATE_ENDED,()=>{updating=false;setTimeout(signal,120);});}catch(_){}},1000);
-  const api={open,openCleanup,openGallery,dispose(){if(disposed)return;disposed=true;clearInterval(poll);for(const f of disposers)f();listeners.clear();app?.dispose();cleanupApp?.dispose();galleryApp?.dispose();if(!app)host.remove();errorPanel?.remove();drawer?.remove();window.removeEventListener('pagehide',api.dispose);if(target[KEY]===api)delete target[KEY];}};
+  const api={open,openCleanup,openGallery,openWorldbooks,dispose(){if(disposed)return;disposed=true;clearInterval(poll);for(const f of disposers)f();listeners.clear();app?.dispose();cleanupApp?.dispose();galleryApp?.dispose();worldbooksApp?.dispose();if(!app)host.remove();errorPanel?.remove();drawer?.remove();window.removeEventListener('pagehide',api.dispose);if(target[KEY]===api)delete target[KEY];}};
   target[KEY]=api;window.addEventListener('pagehide',api.dispose);
   };
   globalThis.MvuViewerHostStart();

@@ -1,11 +1,12 @@
 {
   "name": "sillytavern-mvu-viewer",
-  "version": "1.5.3",
+  "version": "1.6.0",
   "private": true,
   "scripts": {
     "test": "node run-tests.cjs",
     "test:browser": "node browser-edit-test.cjs",
-    "test:cleanup:browser": "node browser-cleanup-test.cjs"
+    "test:cleanup:browser": "node browser-cleanup-test.cjs",
+    "test:worldbooks:browser": "node browser-worldbooks-test.cjs"
   },
   "devDependencies": {
     "jsdom": "30.1.3",

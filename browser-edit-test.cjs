@@ -16,13 +16,13 @@ document.getElementById('settings').showModal();
 document.getElementById('error-stream').onclick=()=>{setActive(false);events.emit('start');};
 document.getElementById('active').onclick=()=>{setActive(true);events.emit('start');};
 document.getElementById('idle').onclick=()=>{setActive(false);events.emit('end');};
-await import('/scripts/extensions/third-party/mvu/index-v1.5.3.js');
+await import('/scripts/extensions/third-party/mvu/index-v1.6.0.js');
 </script></html>`;
 const nativeScript=`let active=false;const map=new Map();export const isGenerating=()=>active;export function setActive(v){active=v}export const events={on(n,f){if(!map.has(n))map.set(n,new Set());map.get(n).add(f)},off(n,f){map.get(n)?.delete(f)},emit(n){for(const f of map.get(n)||[])f()}};`;
 (async()=>{
  const server=http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost');
-  if(url.pathname==='/'){res.setHeader('content-type','text/html;charset=utf-8');res.end(baseline?html.replace('index-v1.5.3.js','index-v1.4.3.js'):html);return;}
+  if(url.pathname==='/'){res.setHeader('content-type','text/html;charset=utf-8');res.end(baseline?html.replace('index-v1.6.0.js','index-v1.4.3.js'):html);return;}
   if(url.pathname==='/state.json'){res.setHeader('content-type','application/json');res.end(JSON.stringify(state));return;}
   if(url.pathname==='/save'){let data='';for await(const c of req)data+=c;state=JSON.parse(data);writes++;res.end('ok');return;}
   if(url.pathname==='/script.js'){res.setHeader('content-type','text/javascript');res.end(nativeScript);return;}
@@ -40,7 +40,7 @@ const nativeScript=`let active=false;const map=new Map();export const isGenerati
   const viewer=page.locator('#tw-mvu-viewer-v1');await viewer.getByRole('button',{name:'系统与技能',exact:true}).click();
   assert.equal(await viewer.getByRole('button',{name:'编辑',exact:true}).isEnabled(),false);assert.equal(await viewer.getByRole('button',{name:'导入',exact:true}).isEnabled(),false);assert.equal(writes,0);
   baseline=false;await page.reload();await page.screenshot({path:path.join(__dirname,'entry-mobile-verified.png')});await page.getByRole('button',{name:'读取或刷新当前 MVU 数据',exact:true}).click();await viewer.getByRole('button',{name:'系统与技能',exact:true}).click();
-  const menuButtons=page.locator('#mvu-viewer-extension .mvu-viewer-menu-button');assert.equal(await menuButtons.count(),3);for(let i=0;i<3;i++){const box=await menuButtons.nth(i).boundingBox();assert(box&&box.width>350,`入口按钮 ${i} 应铺满手机设置栏，实际宽度=${box?.width}`);assert.equal(await menuButtons.nth(i).evaluate(n=>getComputedStyle(n).width),await menuButtons.nth(i).evaluate(n=>`${n.getBoundingClientRect().width}px`));}
+  const menuButtons=page.locator('#mvu-viewer-extension .mvu-viewer-menu-button');assert.equal(await menuButtons.count(),4);for(let i=0;i<4;i++){const box=await menuButtons.nth(i).boundingBox();assert(box&&box.width>350,`入口按钮 ${i} 应铺满手机设置栏，实际宽度=${box?.width}`);assert.equal(await menuButtons.nth(i).evaluate(n=>getComputedStyle(n).width),await menuButtons.nth(i).evaluate(n=>`${n.getBoundingClientRect().width}px`));}
   const edit=()=>viewer.getByRole('button',{name:'编辑',exact:true});assert(await edit().isEnabled());assert(await viewer.getByRole('button',{name:'导入',exact:true}).isEnabled());
   await page.getByRole('button',{name:'模拟已停止的错误流',exact:true}).click();assert(await edit().isEnabled());
   await edit().click();await viewer.locator('.dialog textarea').fill('123');await viewer.getByRole('button',{name:'加入修改',exact:true}).click();await viewer.getByRole('button',{name:'保存修改',exact:true}).click();await viewer.getByRole('button',{name:'确认保存',exact:true}).click();await viewer.getByText('保存成功，已重新读取核对。',{exact:false}).waitFor();assert.equal(state.stat_data.system.points,123);assert.equal(writes,1);

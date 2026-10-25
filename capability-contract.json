@@ -60,6 +60,20 @@
       "symbol": "SillyTavern.getContext().saveSettingsDebounced",
       "required": false,
       "fallback": "Report settings unavailable"
+    },
+    {
+      "id": "worldbook-native",
+      "owner": "sillytavern",
+      "symbol": "world-info.js:updateWorldInfoList, world_names; script.js:getRequestHeaders; /api/worldinfo/get",
+      "required": false,
+      "fallback": "Worldbook page reports unsupported API; MVU and cleanup remain available"
+    },
+    {
+      "id": "worldbook-delete",
+      "owner": "sillytavern",
+      "symbol": "TavernHelper.deleteWorldbook or world-info.js:deleteWorldInfo",
+      "required": false,
+      "fallback": "Deletion reports unsupported API and stops; export remains available"
     }
   ]
 }
