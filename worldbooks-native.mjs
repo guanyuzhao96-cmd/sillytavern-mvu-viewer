@@ -3,9 +3,10 @@
 // 98f51b7315adbf292f3aa3bda16784455ce12e58. Runtime capability checks remain required.
 import * as worlds from '../../../world-info.js';
 import * as script from '../../../../script.js';
+import {deleteBatch} from './worldbooks-batch.mjs?v=1.6.2';
 export function createWorldbookAdapter() {
   if (typeof worlds.updateWorldInfoList !== 'function' || typeof script.getRequestHeaders !== 'function') throw Error('当前酒馆缺少世界书管理接口');
-  return {
+  const adapter = {
     async list() { await worlds.updateWorldInfoList(); if (!Array.isArray(worlds.world_names)) throw Error('无法读取世界书列表'); return [...worlds.world_names]; },
     async read(name) {
       // Read native JSON fresh: preserves unknown fields and avoids stale editor cache.
@@ -15,6 +16,47 @@ export function createWorldbookAdapter() {
       if (!data || typeof data.entries !== 'object' || data.entries === null || Array.isArray(data.entries)) throw Error('世界书不是酒馆原生 JSON 格式');
       return data;
     },
+    async removeMany(names,onProgress) {
+      const jq=globalThis.jQuery;
+      // Match native deleteWorldInfo side effects. Missing pieces use the native
+      // serial path; never run its shared DOM/state updates concurrently.
+      const fast=typeof jq==='function' && typeof worlds.worldInfoCache?.delete==='function'
+        && Array.isArray(worlds.selected_world_info) && typeof worlds.setWorldInfoButtonClass==='function'
+        && typeof script.saveSettingsDebounced==='function' && typeof script.saveCharacterDebounced==='function';
+      const attempted=[];let results,remaining,syncError='';
+      try {
+        results=await deleteBatch(names,async name=>{
+          attempted.push(name);
+          if(!fast)return adapter.remove(name);
+          const response=await fetch('/api/worldinfo/delete',{method:'POST',headers:script.getRequestHeaders(),body:JSON.stringify({name})});
+          if(!response.ok)throw Error('删除失败 HTTP '+response.status);
+        },{concurrency:fast?3:1,onProgress});
+      } finally {
+        // Includes uncertain transport failures: final server list is authoritative.
+        try { remaining=await adapter.list(); }
+        catch(error){syncError='刷新核对失败：'+(error.message||error);}
+        if(fast){
+          try {
+            const removed=attempted.filter(name=>remaining?!remaining.includes(name):results?.some(r=>r.name===name&&r.ok));
+            for(const name of attempted)worlds.worldInfoCache.delete(name);
+            let settingsChanged=false;
+            for(const name of removed){
+              const i=worlds.selected_world_info.indexOf(name);
+              if(i!==-1){worlds.selected_world_info.splice(i,1);settingsChanged=true;}
+            }
+            if(settingsChanged)script.saveSettingsDebounced();
+            // Same native editor/character handlers, dispatched once per batch.
+            jq('#world_editor_select').trigger('change');
+            if(removed.includes(jq('#character_world').val())){
+              jq('#character_world').val('').trigger('change');
+              worlds.setWorldInfoButtonClass(undefined,false);
+              if(script.menu_type!=='create')script.saveCharacterDebounced();
+            }
+          }catch(error){syncError+=(syncError?'；':'')+'宿主状态同步失败：'+(error.message||error);}
+        }
+      }
+      return {results,remaining,syncError,mode:fast?'batch':'compatible'};
+    },
     async remove(name) {
       const helper = globalThis.TavernHelper;
       const fn = typeof helper?.deleteWorldbook === 'function' ? helper.deleteWorldbook.bind(helper) : worlds.deleteWorldInfo;
@@ -22,4 +64,5 @@ export function createWorldbookAdapter() {
       if (await fn(name) !== true) throw Error('宿主未确认删除成功');
     },
   };
+  return adapter;
 }

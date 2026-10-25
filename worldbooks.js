@@ -26,7 +26,7 @@ function mount(host,adapter){
  const status=t=>{$('.status').textContent=t;};
  function controls(){for(const id of ['refresh','search','all','clear','export','delete','close'])$('#'+id).disabled=busy;for(const cb of shadow.querySelectorAll('#list input'))cb.disabled=busy;$('#count').textContent=`已选 ${selected.size} / 共 ${names.length} 本`;}
  function render(){const query=$('#search').value.trim().toLocaleLowerCase();$('#list').replaceChildren();for(const name of names.filter(n=>n.toLocaleLowerCase().includes(query))){const label=doc.createElement('label');label.className='row';const cb=doc.createElement('input');cb.type='checkbox';cb.checked=selected.has(name);const text=doc.createElement('span');text.textContent=name;cb.onchange=()=>{cb.checked?selected.add(name):selected.delete(name);controls();};label.append(cb,text);$('#list').append(label);}controls();}
- async function refresh(){const result=await adapter.list();if(!Array.isArray(result)||result.some(n=>typeof n!=='string'))throw Error('世界书列表格式异常');names=[...new Set(result)].sort((a,b)=>a.localeCompare(b,'zh'));for(const n of selected)if(!names.includes(n))selected.delete(n);render();}
+ async function refresh(result){if(result===undefined)result=await adapter.list();if(!Array.isArray(result)||result.some(n=>typeof n!=='string'))throw Error('世界书列表格式异常');names=[...new Set(result)].sort((a,b)=>a.localeCompare(b,'zh'));for(const n of selected)if(!names.includes(n))selected.delete(n);render();}
  async function run(fn){if(busy||disposed)return;busy=true;controls();try{await fn();}catch(e){status('操作未完成：'+(e.message||e));}finally{busy=false;if(!disposed)controls();}}
  async function prepare(){const requested=[...selected];if(!requested.length)throw Error('请先勾选世界书');const existing=await adapter.list();const books=[];for(const name of requested){if(!existing.includes(name))throw Error(name+' 已不存在，请刷新');status(`读取 ${books.length+1}/${requested.length}：${name}`);const data=await adapter.read(name);books.push({name,data});}return books;}
  function download(books){const blob=archive(books),url=URL.createObjectURL(blob);urls.add(url);const a=doc.createElement('a');a.href=url;a.download='世界书批量备份_'+new Date().toISOString().replace(/[:.]/g,'-')+'.zip';shadow.append(a);a.click();a.remove();const timer=setTimeout(()=>{URL.revokeObjectURL(url);urls.delete(url);timers.delete(timer);},60000);timers.add(timer);return blob.size;}
@@ -35,15 +35,22 @@ function mount(host,adapter){
  $('#export').onclick=()=>run(async()=>{const books=await prepare();const size=download(books);status(`已发起下载：${books.length} 本，${(size/1024).toFixed(1)} KiB。解压后可逐本导入酒馆。`);});
  $('#delete').onclick=()=>run(async()=>{
   const requested=[...selected];if(!requested.length)throw Error('请先勾选世界书');
-  const deleted=[],failed=[];
-  try{
-   for(const name of requested){status(`正在删除 ${deleted.length+1}/${requested.length}：${name}`);try{
-    await adapter.remove(name);
-    if((await adapter.list()).includes(name))throw Error('删除后仍在列表中');
-    deleted.push(name);selected.delete(name);
-   }catch(e){failed.push(name+'：'+(e.message||e));break;}}
-   status(`删除成功 ${deleted.length}/${requested.length} 本。`+(failed.length?'\n已停止，失败或未核实：'+failed.join('\n')+'\n其余未执行，请刷新核对。':''));
-  }finally{await refresh();}
+  status(`正在删除 0/${requested.length}`);
+  const batch=await adapter.removeMany(requested,(done,total)=>status(`正在删除 ${done}/${total}`));
+  if(!Array.isArray(batch.remaining)){
+   status('删除请求已执行，但无法核实最终结果。'+(batch.syncError||'列表读取失败')+'。请点击刷新核对。');return;
+  }
+  const attempted=new Set(batch.results.map(r=>r.name));
+  const deleted=requested.filter(name=>attempted.has(name)&&!batch.remaining.includes(name));
+  const failed=batch.results.filter(r=>batch.remaining.includes(r.name));
+  const unattempted=requested.length-attempted.size;
+  for(const name of deleted)selected.delete(name);
+  await refresh(batch.remaining);
+  status(`删除成功 ${deleted.length}/${requested.length} 本。`+
+   (failed.length?'\n失败或未删除：'+failed.map(r=>r.name+'：'+(r.error||'删除后仍在列表中')).join('\n'):'')+
+   (unattempted?'\n其余 '+unattempted+' 本未执行；已停止派发新请求。':'')+
+   (batch.syncError?'\n'+batch.syncError:''));
+
  });
  $('#close').onclick=()=>{if(!busy)host.hidden=true;};
  return {shadow,open(){host.hidden=false;return run(async()=>{await refresh();status('请选择要导出或删除的世界书');});},dispose(){disposed=true;for(const timer of timers)clearTimeout(timer);timers.clear();for(const url of urls)URL.revokeObjectURL(url);urls.clear();host.remove();}};

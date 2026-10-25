@@ -38,5 +38,5 @@ for(const [name,done] of [['重生成：每条仅保留当前页','完成：删�
  else assert.equal(saved.reduce((n,m)=>n+(m.variables??[]).filter(d=>d&&Object.keys(d).length).length,0),1);
  await page.reload();
 }
-assert.equal(writes,5);await page.reload();assert.match(await root.getByRole('heading',{level:1}).textContent(),/1.6.1/);assert.deepEqual(errors,[]);console.log(JSON.stringify({result:'PASS',messages:saved.length,persistedWrites:writes,checks:'three actual button clicks, in-page confirmation/cancel, downloads, malformed swipe recovery, latest metadata, fresh page reload'}));
+assert.equal(writes,5);await page.reload();assert.match(await root.getByRole('heading',{level:1}).textContent(),/1.6.2/);assert.deepEqual(errors,[]);console.log(JSON.stringify({result:'PASS',messages:saved.length,persistedWrites:writes,checks:'three actual button clicks, in-page confirmation/cancel, downloads, malformed swipe recovery, latest metadata, fresh page reload'}));
 }finally{await browser?.close();await new Promise(r=>server.close(r));}})().catch(e=>{console.error(e.stack?.split('\n').slice(0,2).join('\n'));process.exitCode=1});

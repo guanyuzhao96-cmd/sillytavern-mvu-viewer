@@ -74,6 +74,13 @@
       "symbol": "TavernHelper.deleteWorldbook or world-info.js:deleteWorldInfo",
       "required": false,
       "fallback": "Deletion reports unsupported API and stops; export remains available"
+    },
+    {
+      "id": "worldbook-batch-delete",
+      "owner": "sillytavern",
+      "symbol": "world-info.js:worldInfoCache.delete, selected_world_info, setWorldInfoButtonClass; script.js:saveSettingsDebounced, saveCharacterDebounced; jQuery; /api/worldinfo/delete",
+      "required": false,
+      "fallback": "Use serial native deletion when complete cache/global/character cleanup contract is unavailable; final verification reuses one refreshed list"
     }
   ]
 }
